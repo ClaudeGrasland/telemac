@@ -51,13 +51,14 @@ hyper$year<-sel[, list(news=sum(news)),by =list(order,who, when, where1, where2,
 
 
 
-The aim of this notebook is to present in detail the functions used for the elaboration of the interface TELEMACHOS presented in the paper proposed for publication to the journal *Frontiers*
+This notebook present the functions used by the interface TELEMAC presented in the paper published in the journal *Frontiers*
 
 # DATA COLLECTION
 
 ## Selection of newspapers
 
-We have collected titles of news declared as *international*  as long as we have depicted the existence of at less one foreign country in the text of the title. In each of the 5 countries, we have selected three newspapers with national audience and available through mediacloud database from mid 2013 to mid 2020.  
+We have collected titles of news declared as *international*  (an article is an article where as least one foreign country has been detected by the tagging procedure).
+In each country of analysis, we selected newspapers with a national audience for which we have the avaible data for a period of seven years (mid 2013 to mid 2020).
 
 ```{r, source}
 
@@ -74,8 +75,13 @@ kable(meta, col.names = c("Code","Name","URL"), caption = "Selection of daily ne
 ```
 ## Selection of textual units
 
-Each news has been broken in a maximum of four textual units. The title is the first sentences and the description is divided in up to three sentences. Longer descriptions are not considered. The table below present the total number of textual units by newspaper. In two cases, the description was not available and the textual units are limited to the title (The Guardian and El Mundo).
- 
+Each item of the RSS feeds has been divided in a maximum of four sentences (textual units):
+* The title is considered as the first sentence,
+* A part of the description with a maximum size of three sentences. 
+Longer descriptions has been rejected from the data set.
+The following table present the the number of textual units (sentences) aviable in each newspaper.
+The textual content of two newspapers ( _The Guardian_, _El Mundo_) is limited to the only title.
+
 ```{r}
 tab <- hc 
 tab$order<-as.factor(tab$order)
@@ -92,7 +98,7 @@ kable(tabfin,caption = "Textual units by media and order in news" )
 ```
 ## Distribution of news by country and by week
 
-As a whole the number of textua units by week is comprised between 500 and 2000 in all countries during the period of observation. 
+For the full period of observation, the total number of textual units published weekly in each country of the sample is between 500 and 2000.
 
 ```{r}
 tab <- hc[hc$when < as.Date("2020-06-28"),]
@@ -113,34 +119,49 @@ p
 
 
 
-# ELABORATION OF THE HYPERCUBES
+# BUILDING AN HYPERCUBE
 
 
-## Dimensions 
+## Multiple dimensions for the observation of news
 
-The hypercube is the result of an aggregation of foreign news according to five or
+The hypercube is the result of an aggregation of foreign news according several dimensions:
 
--   **order** : This dimension is related to the semantic unit used which can be the title (`order=1`) or the first sentence of the description (`order=2`) and eventually the following sentences of the description when they are available (`order = 3,4, ...`). This dimension is important for the comparison of results obtained on title only with results obtained on longer pieces of text.
+-   **who** : this dimension is related to the variable which describe the media outlets which published the RSS feeds.
+Each source is related to a code`ll_sss_xxxxxx` where `ll`is the language, `sss`is the ISO3 code of the country and `xxxxxx`the name of the media. 
+For instance, a RSS feed produced by the French newspaper *Le Figaro* is identified by the code who = `fr_FRA_figaro`. 
+Starting from there, it is then possible to proceed to aggregation of the data by group of languages (eg. computation of the indicators for all the French speaking newspapers) or countries (compute the indicateurs for all the media outlets located in France).
 
--   **who** : this dimension is related to the media outlet responsible from the production of the news. The name of the source is organized with a code `ll_sss_xxxxxx` where `ll`is the language, `sss`is the ISO3 code of the country and `xxxxxx`the name of the media. For example, the RSS produced by the french newspaper *Le Figaro* are identified by the code who = `fr_FRA_figaro`. Thanks to this code, it will be further possible to aggregate the cube by language or countries.
+-   **when** : this dimension describe the period when an article of the RSS feeds has been published, according to the time zone of Paris.
+We note that this variable was transformed from the original data.: the Mediacloud collect the data according to the time zone of Boston.
+In the interface, the data are aggregated according to different period of aggregation: weeks, months, quarters or years. 
+In each case, the variable `when` is identified by the date of the first day of the period. 
+For instance, by choosing to work on monthly aggregated data, the first period of observation for the year 2015 will be: `when = 2015-01-01`. 
+These different aggregated data are pre-computed in the data base used by the TELEMAC interface: it is not possible to access to the daily data published by the newspaper and avaible in the Mediacloud data base.
 
--   **when** : this dimension is related to the day of emission of the news, using the timezone of Paris (the news collected by MediaCloud were initially assigned to the timezoneof Boston). The day can further be aggregated by weeks, months, quarters or years. In each case, the variable `when` will refer to the first day of the period (e.g. `when = 2015-01-01` can refer to the month of January or the year 2015 according to the level of aggregation adopted) . In order to increase the performance of the vizualisation interface a list of hypercubes is prepared in advance for each level of time aggregation. 
+
+-   **where1** and **where2** : this dual dimension is associated to the cross-list of foreign countries detected by the country dictionary in the news. 
+For example the news ("*Conflict between Russia and Turkey about Syria*") will lead to list of three places (*RUS,TUR,SYR*) associated to the cross-list of nine couple of places (*RUS-RUS, RUS-TUR, RUS-SYR, TUR-RUS, TUR-TUR, TUR-SYR, SYR-RUS, SYS-TUR, SYR-SYR*) where each couple will receive a weight of 1/9. 
+It is important to keep in mind that the countries where the media are located (mentionned in the `who` dimension) are excluded from the list (see our ambition to work foreign news). 
+We excluded fro the data set the news where any countries is mentioned.
+
+-   **what** : this dimension refers to the topic of interest for the exploration. The topic is identified through a boolean (presence of the topic: `what = _yes_`, absence of the topic: `what = _no_` )
+This solution is applied 1) for the border topic: the variable identify the articles where the keyword "border" is detected in the language of the source (using a multilingual dictionary for the tagging procedure). The topic of international migration is composed by several group of words related to three different way to speak about immigrant people : "migrants", "refugee" and "asylum seekers" (`what = MIG, what = REF, what = ASY`) which refers to news that use the lexical terms of *refugees* or *migrants* or *ayslum seekers* (again: this procedure use a multilingual dictionary taking in account the variation of vocabulary specific of each national context).
+When two subtopics are detected in the same text, the weigh of the news is shared between the different topics. For example a news entitled (*"Migrant and refugees from Syria arrived in Hungary"*) will be broken in 8 cells of the hypercube, each of them with weigh 1/8th corresponding to the combinations (*MIG-SYR-SYR, MIG-SYR-HUN, MIG-HUN-SYR, MIG-HUN-HUN, REF-SYR-SYR, REF-SYR-HUN, REF-HUN-SYR, REF-HUN-HUN*) because we have to combine the topic dimension `what` with the previous dimensions `where1`and `where2`.
+
+To build the hypercube, it is possible to works on different size of text units: (`order=1`): the title or the first sentence, or (`order = 2,3,4, ...`): the title with the selected number of sentence of the description abaible
+This parameter is important because some results, especially regarding the spatial dimension of the analysis (where) are more noticeable on longer texts.
 
 
-
--   **where1** and **where2** : this dual dimension is associated to the cross-list of foreign countries mentioned in the news. For example the news ("*Conflict between Russia and Turkey about Syria*") will produce a list of three places (*RUS,TUR,SYR*) associated to the cross-list of nine couple of places (*RUS-RUS, RUS-TUR, RUS-SYR, TUR-RUS, TUR-TUR, TUR-SYR, SYR-RUS, SYS-TUR, SYR-SYR*) where each couple will receive a weight of 1/9. It is important to keep in mind that the countries where the media are located (mentionned in the `who` dimension) are excluded from the list. We have also excluded the news where the list is empty i.e. the news where no foreign countries are mentioned.
-
--   **what** : this dimension refers to the topic of interest for the exploration. The topic can be defined by a boolean function with values `what = _yes_` if the topic is identified and `what = _no_` if it is not the case. This solution is applied to the border topic where we are just interested in the presence or absence of the keyword *border* in english and the equivalent terms in other language. But we can also imagine more complex situation where the topic can be divided in subtopics that are not necessarily exclusive. For example, the topic of the mobil human is associated to three subtopics (`what = MIG, what = REF, what = ASY`) which refers to news that use the lexical terms of *refugees* or *migrants* or *ayslum seekers* in english (and their equivalent in other languages) for the description of human mobility across borders. In the case where two subtopics are present in the same news (which is not very frequent as the semantic unit is a title or a simple sentence), the weigh of the news is shared between the different topics. For example a news entitled (*"Migrant and refugees from Syria arrived in Hungary"*) will be broken in 8 cells of the hypercube, each of them with weigh 1/8th corresponding to the combinations (*MIG-SYR-SYR, MIG-SYR-HUN, MIG-HUN-SYR, MIG-HUN-HUN, REF-SYR-SYR, REF-SYR-HUN, REF-HUN-SYR, REF-HUN-HUN*) because we have to combine the topic dimension `what` with the previous dimensions `where1`and `where2`.
 
 ## Dictionary of countries
 
-The aim is to create a World map of states which includes an extended list of UN Members, and all pieces of land belonging to a state, whatever the legal status.The states list gathers:
+The aim is to create a World map of states which includes an extended list of UN Members, and all pieces of land belonging to a state, whatever its legal status.The states list gathers:
 
--   the 193 member states of the UN
--   the 2 observer states of the UN : Palestine and Vatican
--   states recognized by at least one member of the UN: Kosovo, Taiwan, Western Sahara, Abkhazia, South Ossetia, Northern Cyprus.
+-   the 193 member states of the UN,
+-   the 2 observer states of the UN : Palestine and the Holy See (Vatican),
+-   the states recognized by at least one member of the UN: Kosovo, Taiwan, Western Sahara, Abkhazia, South Ossetia, Northern Cyprus.
 
-The base map of the 201 spatial units is extracted from Natural Earth with a high level of resolution for the location of the centroid of all spatial units (`world_ctr`). But a simplified version is produced with the geometry of the 177 larger units only for quicker visualization in the graphic interface (`world`). Both files are stored in spatial features format from the package R `sf` which is currently the most practical storage. The default projection is the Winkel Tripel, centered on the meridian of Greenwich.
+The base map of the 201 spatial units is extracted from [Natural Earth](https://www.naturalearthdata.com/) with a high level of resolution for the location of the centroid of all spatial units (`world_ctr`). But a simplified version is produced with the geometry of the 177 larger units only for quicker visualization in the graphic interface (`world`). Both files are stored in spatial features format from the package R `sf` which is currently the most practical storage. The default projection is the Winkel Tripel, centered on the meridian of Greenwich.
 
 ```{r worldmap, echo = FALSE}
 world_ctr<-readRDS("map/world_ctr.Rdata")
@@ -240,38 +261,41 @@ kable(sel[order(-news),])
 
 ```
 
-In the majority of cases, news are associated to one single country. In the case of Syria, 51.4 news does not mention the topic, 11.3 mentions refugees, 3.25 migrants. In the case of Hungary, 3.5 news does not mention the topic, 16.3 mentions migrants, 2.3 refugees. The two countries are associated only one time about a news about asylum seekers where a third country was mentioned, which explains the weight of 0.111 = 1/9.
-
+In the most of cases, the news just mention one single country.
+In the case of Syria, 51.4 news does not mention the topic, 11.3 mentions "refugees", 3.25 "migrants". In the case of Hungary, 3.5 news does not mention the topic, 16.3 mentions "migrants", 2.3 "refugees". The two countries are associated only one time about a news about asylum seekers where a third country was mentioned, which explains the weight of 0.111 = 1/9.
 
 
 # EXPLORATION AND VISUALIZATION FONCTIONS
 
-The five dimensions of the hypercubes can be aggregated in different ways, producing different tables likely to be visualize with different modes of representation. For simplicity, each function will receive the name of the dimensions that are kept after aggregation. We limit the `what` dimension to the boolean case, which means that the different subtopics are never analyzed simultaneously. The default option is the aggregation of all the subtopics.
+The five dimensions of analysis could be analysed through different aggregation of the dimensions of the hypercubes, leading to different tables
+authorizing different modes of visualization. Each function is named according to the dimensions that it is built for.
+For the the `what` dimension the different subtopics are never analyzed simultaneously. The default option is the aggregation of all the subtopics.
 
 ## WHY : DEFINITION OF THE RESEARCH QUESTION
 
-The researcher interested in a topic (WHAT) can develop two mains strategies of exploration (WHY) which will be measured and viualized with two different indicators :
+The researcher interested in a topic (WHAT) can develop two mains strategies to explore the topic through the computation and the visualization of two different indicators :
 
-- The *salience indicator*, defined as the ratio $p_{obs}/p_{est}$ between observed and predicted number of news related to the topic, is typical from an inductive approach. The salience indicator is indeed equivalent to the *specialization indexes* used in econometric model and is very useful at the initial stage of the research for the discovery of under- or over-representations of the phenomenon of interest.
+- The *salience indicator*, defined as the ratio $p_{obs}/p_{est}$ between observed and predicted number of news related to the topic, is ideal for an inductive approach. It is similar to *specialization indexes* used in econometric model and very useful at the initial stage to identify under- or over-representations of the topic of interest during the time units of observation.
 
-- the *p.value* of a chi-2 test applied to the hypothesis of independence  is more adapted to a deductive or hypthetico-deductive approach whre the researcher try to verify that the sample of news is sufficient to demonstrate that the under- or over-representations revealed vy the salience index are not the result of random effects. Using an unilateral test ($H_0 : p_{obs} > p_{est}$) we obtain a p-value which can be interprated as a normalized index of deviation define on $[0,1]$. With the advantage that we can interpret the value greater than 0.99 as significant positive exceptions and the values lower than 0.01 as significant negative exceptions.  
+- The *p.value* of a chi-2 test applied to the hypothesis of independence is more adapted to a deductive or hypthetico-deductive approach, to improve hypothetisis like the suspition of under- or over-representations revealed by a first observation using the salience index. 
+Using an unilateral test ($H_0 : p_{obs} > p_{est}$) we obtain a p-value which can be interpreted as a normalized index of deviation define on $[0,1]$ (with the tool it is possible to interpret the value greater than 0.99 as significant positive exceptions and the values lower than 0.01 as significant negative exceptions).  
 
-All the functions described below will therefore use a statistical test in order to verify for which values we can estimate that the proportion of topic news is significantly lower or greater to a reference value. The R function `testchi2` receive as input a table that contains three columns with the folowing names
+All the functions described below will therefore use a statistical test which identify for which value it is possible to say that the proportion of news related to a topic is significantly lower or greater to a reference value. The R function `testchi2` receive as input a table with three columns:
 
-- **trial** : number of textual units where the topic can be identified. In our case it correspond to the number of title or sentences that has been collected. The number of trial can be greater than the number of news when we combine the title and description. 
-- **success** : number of textual units where the topic of interest has been found. As it correspond to a sum of weights than are not necessarily integers, the values are rounded to zero before computation of the test.
+- **trial** : the number of textual units where the topic can be identified: the number of title or sentences that has been collected. The number of trial can be greater than the number of news when we combine the title and the sentences of the description. 
+- **success** : the number of textual units where the topic of interest has been found.: a sum of weights than are not necessarily integers, the values are rounded to zero before computation of the test.
 - **null.value** : the expected probability of success (i.e. the expected value of the ratio of success divided by trial). In the one-dimension cases, the null.value is equal to a unique value corresponding to the mean probability of success for all sources during the period of observation. But in the case of multi-dimensional analysis, the null.value can be segmented by one of the dimension of interest. 
 
 Once the three variables are fixed, the function will be applied according to a set of three parameters :
 
-- `mintest`: the minimum value of the estimated number of success which is necessary to realize a chi-square test in optimal statistical conditions. The literature suggest a threshold value of 5 but the user can decide to relax or increase this value. The test will be realized if and only if the threshold is reached. We do not recommand to use low threshold which will produce a lot of message of error in the function `prop.test()`which can dramatically increase the time of computation. 
-- `cut-breaks` and `cut_names`are to linked parameters which are used to define qualitative interpretations of the p-value. In our example, we are interested in both value located below or above the threshold. For this reason we will use a double scale of signicativity in both directions around the expected probability. 
+- `mintest`: the minimum value of the estimated number of success needed for the chi-square test in optimal statistical conditions. The literature suggest a threshold value of 5 but the user can decide to reduce or increase this threshold. The test will be made if and only if the threshold is reached. We do not recommend to use low threshold: it will generate error messages by using the `prop.test()` function and increase the time need for the computation procedure. 
+- `cut-breaks` and `cut_names`are linked parameters used to define qualitative interpretations of the p-value. In our example, we are interested in both value located below or above the threshold. For this reason we will use a double scale of significance  in both directions around the expected probability. 
 
 The result of the procedure is the addition of four columns to the initial table :
 
-- **estimate** is the observed proportion of the topic (i.e. ratio of success divided by trial) which has to be compared to the reference value. 
-- **salience** is the ratio between estimate and null.value
-- **chi2** is the chi-square of the relation between expected and observed success. 
+- **estimate** is the observed proportion of the news related to the topic (i.e. ratio of success divided by trial) which has to be compared to the reference value,
+- **salience** is the ratio between estimate and null.value,
+- **chi2** is the value of the chi-square test of the relation between expected and observed success,
 - **p.value** is the result of the unilateral test $p_{observed} < p_{estimated}$ with 1 degree of freedom. 
 
 - NB.1: When the threshold `minsamp` is not reached, the columns **estimate** and **salience** are filled with missing values. The aim is to avoid interpretation of variation of proportion that are not based on a reasonable sample of news. The default value for this parameter is 20| .
