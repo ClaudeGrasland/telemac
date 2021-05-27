@@ -1,5 +1,5 @@
 ---
-title: "TELEMACHOS - Version 2.1"
+title: "TELEMAC - Version 2.1"
 subtitle: "Supplementary material"
 author: "Claude Grasland"
 output: html_document
