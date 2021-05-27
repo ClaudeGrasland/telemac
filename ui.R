@@ -3,12 +3,8 @@ library(shiny)
 
 wwww_description <- list(
   tags$h4("AUTHORS"),
-  tags$p("This tool has been developped by Claude Grasland (1,2,3), Romain Leconte (1,2), Etienne Toureille(2,3,4) and Marta Severo (5)"),
-  tags$p("1. Université de Paris"),
-  tags$p("2. FR 2007 CIST"),
-  tags$p("3. UMR 8504 Géographie-cités"),
-  tags$p("4. CNRS"),
-  tags$p("5. Université Paris Nanterre"),
+  tags$p("This tool has been developped by Claude Grasland (1,2,3), Romain Leconte (1,2), Etienne Toureille(2,3,4) and Marta Severo (5) : 
+        1. Université de Paris, 2. FR 2007 CIST, 3. UMR 8504 Géographie-cités, 4. CNRS, 5. Université Paris Nanterre"),
   tags$p(),
   tags$h4("SOURCES"),
   tags$p("The data used in this application are derived from the MediaCloud, an open source platform for studying media ecosystems (https://mediacloud.org/).
@@ -38,8 +34,7 @@ Exploration <- fluidRow(
            h4("MAIN PARAMETERS"),
              selectInput("topic","WHAT = Topic",
                          choices = c("Migrant and Refugees" = "mobil",
-                                     "Borders" = "border",
-                                     "Pandemic" ="pandemic"),
+                                     "Borders" = "border"),
                          selected="mobil"),
  
            checkboxGroupInput("host", "WHO = Host country",
@@ -140,7 +135,7 @@ credits <-  wellPanel(
   h4("WHAT"))
 
 
-navbarPage("TELEMACHOS (Topic Explorator Lab of European Media Agenda applied to Crisis Hanging On Space)",
+navbarPage("TELEMAC (Topic Explorator Lab of European Media Agenda applied to Crisis)",
 #           header=tags$head(tags$style(HTML(css_string))),
 
             tabPanel("Exploration",Exploration)
