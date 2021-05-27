@@ -115,7 +115,10 @@ p
 
 # ELABORATION OF THE HYPERCUBES
 
-The hypercube is the result of an aggregation of foreign news according to five or six dimensions :
+
+## Dimensions 
+
+The hypercube is the result of an aggregation of foreign news according to five or
 
 -   **order** : This dimension is related to the semantic unit used which can be the title (`order=1`) or the first sentence of the description (`order=2`) and eventually the following sentences of the description when they are available (`order = 3,4, ...`). This dimension is important for the comparison of results obtained on title only with results obtained on longer pieces of text.
 
@@ -129,31 +132,7 @@ The hypercube is the result of an aggregation of foreign news according to five 
 
 -   **what** : this dimension refers to the topic of interest for the exploration. The topic can be defined by a boolean function with values `what = _yes_` if the topic is identified and `what = _no_` if it is not the case. This solution is applied to the border topic where we are just interested in the presence or absence of the keyword *border* in english and the equivalent terms in other language. But we can also imagine more complex situation where the topic can be divided in subtopics that are not necessarily exclusive. For example, the topic of the mobil human is associated to three subtopics (`what = MIG, what = REF, what = ASY`) which refers to news that use the lexical terms of *refugees* or *migrants* or *ayslum seekers* in english (and their equivalent in other languages) for the description of human mobility across borders. In the case where two subtopics are present in the same news (which is not very frequent as the semantic unit is a title or a simple sentence), the weigh of the news is shared between the different topics. For example a news entitled (*"Migrant and refugees from Syria arrived in Hungary"*) will be broken in 8 cells of the hypercube, each of them with weigh 1/8th corresponding to the combinations (*MIG-SYR-SYR, MIG-SYR-HUN, MIG-HUN-SYR, MIG-HUN-HUN, REF-SYR-SYR, REF-SYR-HUN, REF-HUN-SYR, REF-HUN-HUN*) because we have to combine the topic dimension `what` with the previous dimensions `where1`and `where2`.
 
-## Storage of the hypercube in data.table format
-
-Considering the potential size of the hypercubes, we have chosen an efficient format of storage with the R package `data.table` (<https://rdatatable.gitlab.io/data.table/>) which is recognized as more efficient for large computation than the classical `data.frame` or `tibble` formats.
-
-In order to reduce the size of storage we do not store the empty cells of the cube but who have to keep in mind the fact that these empty cells should be taken into account when we will further aggregate the cube for the production of maps or timelines.
-
-As an example, we present below an extraction of the hypercube of titles (order) of news during the month of september 2015 (when = "2015-09-01") by the french newspaper La Croix (who) about Syria and Hungary (where1 and where2) for the topic of human mobility (what). We have normally 1 x 1 x 1 x 2 x 2 x 4 = 16 possibilities of cells as the dimensions of order, who and time are fixed. But only 10 possibilities out of 16 are realized.
-
-```{r hypercube_sample, echo = FALSE}
-sel<-hyper$month
-
-
-sel<-sel[  order %in% c(1) &
-           who=="fr_FRA_lacroi" & 
-           when==as.Date("2015-09-01") & 
-           where1 %in% c("SYR","HUN") & 
-           where2 %in% c("SYR","HUN") 
-           ,]
-kable(sel[order(-news),])
-
-```
-
-In the majority of cases, news are associated to one single country. In the case of Syria, 51.4 news does not mention the topic, 11.3 mentions refugees, 3.25 migrants. In the case of Hungary, 3.5 news does not mention the topic, 16.3 mentions migrants, 2.3 refugees. The two countries are associated only one time about a news about asylum seekers where a third country was mentioned, which explains the weight of 0.111 = 1/9.
-
-## Spatial dimension
+## Dictionary of countries
 
 The aim is to create a World map of states which includes an extended list of UN Members, and all pieces of land belonging to a state, whatever the legal status.The states list gathers:
 
@@ -183,10 +162,91 @@ layoutLayer(title = "The world in 201 states - sovereign, observer or partly rec
 ```
 
 
+The recognition of states is based on a limited of keywords or regular expression which concern the name of the country, the adjective and/or the gentile of inhabitants and the capital city. The regular expression are used cautiously in order to exclude false positive. 
 
-# AGREGATION AND VISUALIZATION FONCTIONS
+```{r, dico states}
 
-The six dimensions of the hypercubes can be aggregated in different ways, producing different tables likely to be visualize with different modes of representation. For simplicity, each function will receive the name of the dimensions that are kept after aggregation. We limit the `what` dimension to the boolean case, which means that the different subtopics are never analyzed simultaneously. The default option is the aggregation of all the subtopics.
+sel<-names(table(hc$who))
+
+dico<-read.csv("dict/keywords_states_apr_2021.csv",
+               header=T,
+               sep = ";",
+               encoding = "UTF-8")
+sel<-dico %>% filter(lang %in% c("en","fr","de","es","it")) %>% filter(ISO3=="SYR")
+
+
+kable(sel, col.names = c("ISO3","regexp","language"), caption = "Sample of the dictionary of countries (Syria)")
+```
+
+## Dictionary of border topic
+
+The dictionary of border topic is voluntary limited to one or two words or regular expression in each language related to the political divisions of the world. We exclude words that are more ambiguous and are not necessary related to geopolitical divisions like *frontier* or *limit* in english.
+
+
+```{r, dico border}
+
+sel<-names(table(hc$who))
+
+dico<-read.csv("dict/keywords_border_apr_2021.csv",
+               header=T,
+               sep = ";",
+               encoding = "UTF-8")
+sel<-dico %>% filter(lang %in% c("en","fr","de","es","it"))
+
+
+kable(sel, col.names = c("ISO3","regexp","language"), caption = "Dictionary of border topic")
+```
+
+
+## Dictionary of international human mobility
+
+The dictionary of international human mobility is more complex as it is based on two different concept which correspond in english to *migrant* and *refugees* and which can be observed in the other languages under investigation. The first concept (designed as **MIG**) is more general but is also often associated to more negative visions of human mobility across borders. The second concept (designed as **REF**) is generally related to legal issues but can also be associated to "politically correct" way of description associated to a more positive - or less negative- vision of human mobility. These dual concepts insure a bette coverage of the topic in different languages but can also be used to discover semantic shifts inside the same language. For a more detailed discussion, see. [Leconte R., Toureille E. & Grasland C., 2020](https://journals.openedition.org/socio-anthropologie/6235)  
+
+
+```{r, dico mobil}
+
+sel<-names(table(hc$who))
+
+dico<-read.csv("dict/keywords_mobil_apr_2021.csv",
+               header=T,
+               sep = ";",
+               encoding = "UTF-8")
+sel<-dico %>% filter(lang %in% c("en","fr","de","es","it"))
+
+
+kable(sel, col.names = c("ISO3","regexp","language"), caption = "Dictionary of mobility topic")
+```
+
+
+## Storage and aggregation ofthe hypercube 
+
+Considering the potential size of the hypercubes, we have chosen an efficient format of storage with the R package `data.table` (<https://rdatatable.gitlab.io/data.table/>) which is recognized as more efficient for large computation than the classical `data.frame` or `tibble` formats.
+
+In order to reduce the size of storage we do not store the empty cells of the cube but who have to keep in mind the fact that these empty cells should be taken into account when we will further aggregate the cube for the production of maps or timelines.
+
+As an example, we present below an extraction of the hypercube of titles (order) of news during the month of september 2015 (when = "2015-09-01") by the french newspaper La Croix (who) about Syria and Hungary (where1 and where2) for the topic of human mobility (what). We have normally 1 x 1 x 1 x 2 x 2 x 4 = 16 possibilities of cells as the dimensions of order, who and time are fixed. But only 10 possibilities out of 16 are realized.
+
+```{r hypercube_sample, echo = FALSE}
+sel<-hyper$month
+
+
+sel<-sel[  order %in% c(1) &
+           who=="fr_FRA_lacroi" & 
+           when==as.Date("2015-09-01") & 
+           where1 %in% c("SYR","HUN") & 
+           where2 %in% c("SYR","HUN") 
+           ,]
+kable(sel[order(-news),])
+
+```
+
+In the majority of cases, news are associated to one single country. In the case of Syria, 51.4 news does not mention the topic, 11.3 mentions refugees, 3.25 migrants. In the case of Hungary, 3.5 news does not mention the topic, 16.3 mentions migrants, 2.3 refugees. The two countries are associated only one time about a news about asylum seekers where a third country was mentioned, which explains the weight of 0.111 = 1/9.
+
+
+
+# EXPLORATION AND VISUALIZATION FONCTIONS
+
+The five dimensions of the hypercubes can be aggregated in different ways, producing different tables likely to be visualize with different modes of representation. For simplicity, each function will receive the name of the dimensions that are kept after aggregation. We limit the `what` dimension to the boolean case, which means that the different subtopics are never analyzed simultaneously. The default option is the aggregation of all the subtopics.
 
 ## WHY : DEFINITION OF THE RESEARCH QUESTION
 
