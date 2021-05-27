@@ -1,0 +1,1076 @@
+---
+title: "TELEMACHOS - Version 2.1"
+subtitle: "Supplementary material"
+author: "Claude Grasland"
+output: html_document
+---
+
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, error = FALSE)
+library(sf)
+library(plotly)
+library(RColorBrewer)
+library(data.table)
+library(DT)
+library(dplyr)
+library(cartography)
+library(knitr)
+library(tidygraph)
+library(ggraph)
+library(ggplot2)
+#library(reldist)
+#library(quanteda)
+
+#load hypercube by weeks
+hc <- readRDS("data/hc_EUR_foreign_mobil_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-12-31"),]
+hc<-hc[hc$when<as.Date("2020-01-01"),]
+ha<-hc[is.na(hc$when)==FALSE,]
+
+# store week in a list of hypercubes
+hyper<-list()
+hyper$week<-hc
+
+#aggregate by month and store
+sel<-hc
+sel$when<-as.Date(cut(sel$when,breaks =  "month"))
+hyper$month<-sel[, list(news=sum(news)),by =list(order,who, when, where1, where2, what)]
+
+#aggregate by quarter and store
+sel<-hc
+sel$when<-as.Date(cut(sel$when,breaks =  "quarter"))
+hyper$quarter<-sel[, list(news=sum(news)),by =list(order,who, when, where1, where2, what)]
+
+#aggregate by month and store
+sel<-hc
+sel$when<-as.Date(cut(sel$when,breaks =  "year"))
+hyper$year<-sel[, list(news=sum(news)),by =list(order,who, when, where1, where2, what)]
+
+```
+
+
+
+The aim of this notebook is to present in detail the functions used for the elaboration of the interface TELEMACHOS presented in the paper proposed for publication to the journal *Frontiers*
+
+# DATA COLLECTION
+
+## Selection of newspapers
+
+We have collected titles of news declared as *international*  as long as we have depicted the existence of at less one foreign country in the text of the title. In each of the 5 countries, we have selected three newspapers with national audience and available through mediacloud database from mid 2013 to mid 2020.  
+
+```{r, source}
+
+sel<-names(table(hc$who))
+
+meta<-read.csv("data/meta.csv",
+               header=T,
+               sep = ";",
+               encoding = "UTF-8")
+meta<-meta[,c(2,4,3)]
+
+
+kable(meta, col.names = c("Code","Name","URL"), caption = "Selection of daily newspapers")
+```
+## Selection of textual units
+
+Each news has been broken in a maximum of four textual units. The title is the first sentences and the description is divided in up to three sentences. Longer descriptions are not considered. The table below present the total number of textual units by newspaper. In two cases, the description was not available and the textual units are limited to the title (The Guardian and El Mundo).
+ 
+```{r}
+tab <- hc 
+tab$order<-as.factor(tab$order)
+levels(tab$order)<-c("Title", "1st sentence", "2nd sentence","3rd sentence")
+tab <- tab[,.(n = round(sum(news),0)), list(order,who)]
+tab<-dcast(tab,who~order, fill=0)
+mat<-as.matrix(tab[,-1])
+row.names(mat)<-tab$who
+tabfin <- addmargins(mat)
+
+
+
+kable(tabfin,caption = "Textual units by media and order in news" )
+```
+## Distribution of news by country and by week
+
+As a whole the number of textua units by week is comprised between 500 and 2000 in all countries during the period of observation. 
+
+```{r}
+tab <- hc[hc$when < as.Date("2020-06-28"),]
+tab$week<-cut(tab$when,breaks = "week")
+tab$country<-substr(tab$who,4,6)
+tab <- tab[,.(n = round(sum(news),0)), list(week,country)]
+tab$week<-as.Date(tab$week)
+
+p <- ggplot(tab, aes(x=week, y = n,colour=country)) +
+      geom_line() +
+      scale_y_continuous("Number of textual units") +
+        scale_x_date("Week")
+
+p
+
+
+```
+
+
+
+# ELABORATION OF THE HYPERCUBES
+
+The hypercube is the result of an aggregation of foreign news according to five or six dimensions :
+
+-   **order** : This dimension is related to the semantic unit used which can be the title (`order=1`) or the first sentence of the description (`order=2`) and eventually the following sentences of the description when they are available (`order = 3,4, ...`). This dimension is important for the comparison of results obtained on title only with results obtained on longer pieces of text.
+
+-   **who** : this dimension is related to the media outlet responsible from the production of the news. The name of the source is organized with a code `ll_sss_xxxxxx` where `ll`is the language, `sss`is the ISO3 code of the country and `xxxxxx`the name of the media. For example, the RSS produced by the french newspaper *Le Figaro* are identified by the code who = `fr_FRA_figaro`. Thanks to this code, it will be further possible to aggregate the cube by language or countries.
+
+-   **when** : this dimension is related to the day of emission of the news, using the timezone of Paris (the news collected by MediaCloud were initially assigned to the timezoneof Boston). The day can further be aggregated by weeks, months, quarters or years. In each case, the variable `when` will refer to the first day of the period (e.g. `when = 2015-01-01` can refer to the month of January or the year 2015 according to the level of aggregation adopted) . In order to increase the performance of the vizualisation interface a list of hypercubes is prepared in advance for each level of time aggregation. 
+
+
+
+-   **where1** and **where2** : this dual dimension is associated to the cross-list of foreign countries mentioned in the news. For example the news ("*Conflict between Russia and Turkey about Syria*") will produce a list of three places (*RUS,TUR,SYR*) associated to the cross-list of nine couple of places (*RUS-RUS, RUS-TUR, RUS-SYR, TUR-RUS, TUR-TUR, TUR-SYR, SYR-RUS, SYS-TUR, SYR-SYR*) where each couple will receive a weight of 1/9. It is important to keep in mind that the countries where the media are located (mentionned in the `who` dimension) are excluded from the list. We have also excluded the news where the list is empty i.e. the news where no foreign countries are mentioned.
+
+-   **what** : this dimension refers to the topic of interest for the exploration. The topic can be defined by a boolean function with values `what = _yes_` if the topic is identified and `what = _no_` if it is not the case. This solution is applied to the border topic where we are just interested in the presence or absence of the keyword *border* in english and the equivalent terms in other language. But we can also imagine more complex situation where the topic can be divided in subtopics that are not necessarily exclusive. For example, the topic of the mobil human is associated to three subtopics (`what = MIG, what = REF, what = ASY`) which refers to news that use the lexical terms of *refugees* or *migrants* or *ayslum seekers* in english (and their equivalent in other languages) for the description of human mobility across borders. In the case where two subtopics are present in the same news (which is not very frequent as the semantic unit is a title or a simple sentence), the weigh of the news is shared between the different topics. For example a news entitled (*"Migrant and refugees from Syria arrived in Hungary"*) will be broken in 8 cells of the hypercube, each of them with weigh 1/8th corresponding to the combinations (*MIG-SYR-SYR, MIG-SYR-HUN, MIG-HUN-SYR, MIG-HUN-HUN, REF-SYR-SYR, REF-SYR-HUN, REF-HUN-SYR, REF-HUN-HUN*) because we have to combine the topic dimension `what` with the previous dimensions `where1`and `where2`.
+
+## Storage of the hypercube in data.table format
+
+Considering the potential size of the hypercubes, we have chosen an efficient format of storage with the R package `data.table` (<https://rdatatable.gitlab.io/data.table/>) which is recognized as more efficient for large computation than the classical `data.frame` or `tibble` formats.
+
+In order to reduce the size of storage we do not store the empty cells of the cube but who have to keep in mind the fact that these empty cells should be taken into account when we will further aggregate the cube for the production of maps or timelines.
+
+As an example, we present below an extraction of the hypercube of titles (order) of news during the month of september 2015 (when = "2015-09-01") by the french newspaper La Croix (who) about Syria and Hungary (where1 and where2) for the topic of human mobility (what). We have normally 1 x 1 x 1 x 2 x 2 x 4 = 16 possibilities of cells as the dimensions of order, who and time are fixed. But only 10 possibilities out of 16 are realized.
+
+```{r hypercube_sample, echo = FALSE}
+sel<-hyper$month
+
+
+sel<-sel[  order %in% c(1) &
+           who=="fr_FRA_lacroi" & 
+           when==as.Date("2015-09-01") & 
+           where1 %in% c("SYR","HUN") & 
+           where2 %in% c("SYR","HUN") 
+           ,]
+kable(sel[order(-news),])
+
+```
+
+In the majority of cases, news are associated to one single country. In the case of Syria, 51.4 news does not mention the topic, 11.3 mentions refugees, 3.25 migrants. In the case of Hungary, 3.5 news does not mention the topic, 16.3 mentions migrants, 2.3 refugees. The two countries are associated only one time about a news about asylum seekers where a third country was mentioned, which explains the weight of 0.111 = 1/9.
+
+## Spatial dimension
+
+The aim is to create a World map of states which includes an extended list of UN Members, and all pieces of land belonging to a state, whatever the legal status.The states list gathers:
+
+-   the 193 member states of the UN
+-   the 2 observer states of the UN : Palestine and Vatican
+-   states recognized by at least one member of the UN: Kosovo, Taiwan, Western Sahara, Abkhazia, South Ossetia, Northern Cyprus.
+
+The base map of the 201 spatial units is extracted from Natural Earth with a high level of resolution for the location of the centroid of all spatial units (`world_ctr`). But a simplified version is produced with the geometry of the 177 larger units only for quicker visualization in the graphic interface (`world`). Both files are stored in spatial features format from the package R `sf` which is currently the most practical storage. The default projection is the Winkel Tripel, centered on the meridian of Greenwich.
+
+```{r worldmap, echo = FALSE}
+world_ctr<-readRDS("map/world_ctr.Rdata")
+world_map<-readRDS("map/world_map.Rdata")
+
+
+
+par(mar=c(2,0,3,0), mfrow=c(1,1))
+typoLayer(world_map,var ="ISO3", 
+          legend.pos = "n",
+          border = "grey40",
+          lwd = 0.5)
+plot(world_ctr$geometry, cex=0.3,col = "red", add=TRUE)
+
+layoutLayer(title = "The world in 201 states - sovereign, observer or partly recognized by United Nation", 
+            scale = "auto",
+            sources = "Natural Earth, proj. Winkel-Tripel")
+
+```
+
+
+
+# AGREGATION AND VISUALIZATION FONCTIONS
+
+The six dimensions of the hypercubes can be aggregated in different ways, producing different tables likely to be visualize with different modes of representation. For simplicity, each function will receive the name of the dimensions that are kept after aggregation. We limit the `what` dimension to the boolean case, which means that the different subtopics are never analyzed simultaneously. The default option is the aggregation of all the subtopics.
+
+## WHY : DEFINITION OF THE RESEARCH QUESTION
+
+The researcher interested in a topic (WHAT) can develop two mains strategies of exploration (WHY) which will be measured and viualized with two different indicators :
+
+- The *salience indicator*, defined as the ratio $p_{obs}/p_{est}$ between observed and predicted number of news related to the topic, is typical from an inductive approach. The salience indicator is indeed equivalent to the *specialization indexes* used in econometric model and is very useful at the initial stage of the research for the discovery of under- or over-representations of the phenomenon of interest.
+
+- the *p.value* of a chi-2 test applied to the hypothesis of independence  is more adapted to a deductive or hypthetico-deductive approach whre the researcher try to verify that the sample of news is sufficient to demonstrate that the under- or over-representations revealed vy the salience index are not the result of random effects. Using an unilateral test ($H_0 : p_{obs} > p_{est}$) we obtain a p-value which can be interprated as a normalized index of deviation define on $[0,1]$. With the advantage that we can interpret the value greater than 0.99 as significant positive exceptions and the values lower than 0.01 as significant negative exceptions.  
+
+All the functions described below will therefore use a statistical test in order to verify for which values we can estimate that the proportion of topic news is significantly lower or greater to a reference value. The R function `testchi2` receive as input a table that contains three columns with the folowing names
+
+- **trial** : number of textual units where the topic can be identified. In our case it correspond to the number of title or sentences that has been collected. The number of trial can be greater than the number of news when we combine the title and description. 
+- **success** : number of textual units where the topic of interest has been found. As it correspond to a sum of weights than are not necessarily integers, the values are rounded to zero before computation of the test.
+- **null.value** : the expected probability of success (i.e. the expected value of the ratio of success divided by trial). In the one-dimension cases, the null.value is equal to a unique value corresponding to the mean probability of success for all sources during the period of observation. But in the case of multi-dimensional analysis, the null.value can be segmented by one of the dimension of interest. 
+
+Once the three variables are fixed, the function will be applied according to a set of three parameters :
+
+- `mintest`: the minimum value of the estimated number of success which is necessary to realize a chi-square test in optimal statistical conditions. The literature suggest a threshold value of 5 but the user can decide to relax or increase this value. The test will be realized if and only if the threshold is reached. We do not recommand to use low threshold which will produce a lot of message of error in the function `prop.test()`which can dramatically increase the time of computation. 
+- `cut-breaks` and `cut_names`are to linked parameters which are used to define qualitative interpretations of the p-value. In our example, we are interested in both value located below or above the threshold. For this reason we will use a double scale of signicativity in both directions around the expected probability. 
+
+The result of the procedure is the addition of four columns to the initial table :
+
+- **estimate** is the observed proportion of the topic (i.e. ratio of success divided by trial) which has to be compared to the reference value. 
+- **salience** is the ratio between estimate and null.value
+- **chi2** is the chi-square of the relation between expected and observed success. 
+- **p.value** is the result of the unilateral test $p_{observed} < p_{estimated}$ with 1 degree of freedom. 
+
+- NB.1: When the threshold `minsamp` is not reached, the columns **estimate** and **salience** are filled with missing values. The aim is to avoid interpretation of variation of proportion that are not based on a reasonable sample of news. The default value for this parameter is 20| .
+
+- NB.2 : When the threshold `minsamp` and `mintest` are not reached together, the columns **chi2** and **p.value** are filled with missing values. The aim is to avoid realization of test that do not fulfill the statistical conditions according to the rules of the art.  The dafault value for this parameter is 5. 
+
+
+### Function
+
+```{r, echo = TRUE}
+#### ---------------- testchi2 ----------------
+#' @title  Compute the average salience of the topic and test significance of deviation
+#' @name what
+#' @description create a table and graphic of the topic
+#' @param tabtest a table with variable trial, success and null.value
+#' @param minsamp : Threshold of sample size requested for salience computation
+#' @param mintest : Threshold of estimated value requested for chi-square test
+
+
+testchi2<-function(tabtest=tabtest,
+                   minsamp = 20,
+                   mintest = 5) 
+  {
+  tab<-tabtest
+  n<-dim(tab)[1]
+  
+  # Compute salience if sample size sufficient (default : N>20)
+  tab$estimate <-NA
+  tab$salience <-NA
+  tab$chi2<-NA
+  tab$p.value<-NA
+  if (tab$trial > minsamp){ tab$estimate<-round(tab$success/tab$trial,5)
+                      tab$salience<-tab$estimate/tab$null.value
+  
+         # Chi-square test if estimated value sufficient (default : Nij* > 5)
+
+           for (i in 1:n) {
+               if(tab$trial[i]*tab$null.value[i]>=mintest) {  
+                    test<-prop.test(x=tab$success[i],n=tab$trial[i], p=tab$null.value[i], 
+                                alternative = "less")
+                    tab$chi2[i]<-round(test$statistic,2)
+                    tab$p.value[i]<-round(test$p.value,5)
+                 } 
+                }
+  }
+  return(tab)
+}
+```
+
+
+```{r}
+tab<-hyper$week
+tab$what <-tab$what !="_no_"
+tab<-tab[is.na(when)==F,]
+tab<-tab[,list(trial = sum(news),success=round(sum(news*what),0)),by = list(who)]
+ref <-round(sum(tab$success)/sum(tab$trial),4)
+tab$null.value<-ref
+
+
+res<-testchi2(tabtest=tab,
+                   minsamp = 100,
+                   mintest = 5) 
+kable(res)
+
+```
+
+
+
+
+
+
+## WHO.WHAT
+
+
+### Function
+
+```{r who.what function, echo = TRUE}
+
+#### ---------------- who.what ----------------
+#' @title  visualize variation of the topic between media
+#' @name who.what
+#' @description create a table of variation of the topic by media
+#' @param hc an hypercube prepared as data.table
+#' @param test : visualize test (TRUE) or salience (FALSE)
+#' @param minsamp : Threshold of sample size requested for salience computation
+#' @param mintest sample size of estimate for chi-square test (default = 5)
+#' @param title Title of the graphic
+
+
+who.what <- function (hc = hypercube,
+                      test = FALSE,
+                      minsamp = 20,
+                      mintest = 5,
+                      title = "Who says What ?")
+{
+  
+  tab<-hc
+{tab$what <-tab$what !="_no_"}
+  
+  tab<-tab[,list(trial = sum(news),success=round(sum(news*what),0)),by = list(who)]
+  ref <-round(sum(tab$success)/sum(tab$trial),4)
+  tab$null.value<-ref
+  
+  tab<-testchi2(tabtest=tab,
+                minsamp = minsamp,
+                mintest = mintest)
+  
+
+  
+    if (test==FALSE) {tab$index =tab$salience
+                     tab<-tab[tab$trial > minsamp,]
+                     mycol<-brewer.pal(7,"YlOrRd")
+                     } 
+               else {tab$index=tab$p.value
+                     tab<-tab[tab$trial*tab$null.value>mintest,]
+                      mycol<-rev(brewer.pal(7,"RdYlBu"))
+                      mycol[4]<-"lightyellow"
+                     }
+  
+  p <- plot_ly(tab,
+               x = ~who,
+               y = ~estimate*100,
+               color= ~index,
+               colors= mycol,
+               hoverinfo = "text",
+               text = ~paste('Source: ',who,
+                             '<br /> Total news  : ', round(trial,0),
+                             '<br /> Topic news : ', round(success,0),
+                             '<br /> % observed  : ', round(estimate*100,2),'%',
+                             '<br /> % estimated : ', round(null.value*100,2),'%',
+                             '<br /> Salience : ', round(salience,2),  
+                             '<br /> p.value : ', round(p.value,4)),
+               type = "bar")  %>%
+    layout(title = title,
+           yaxis = list(title = "% news"),
+           barmode = 'stack')
+  
+  output<-list("table" = tab, "plotly" =p)
+  
+  return(output)
+  
+}
+
+
+```
+
+
+### Example
+
+```{r who.what example}
+hc<-hyper$year
+
+res_who_what<- who.what(hc=hc, 
+                        test = FALSE,
+                        minsamp = 20,
+                        mintest = 5,
+                        title = "Migrant news by media - Salience")
+res_who_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+
+res_who_what<- who.what(hc=hc, 
+                        test = TRUE,
+                        minsamp = 20,
+                        mintest = 5,
+                        title = "Migrant news by media - Significance")
+res_who_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+
+```
+
+## WHEN.WHAT
+
+
+### Function
+
+```{r when.what function, echo = TRUE}
+
+
+#### ---------------- when.what ----------------
+#' @title  visualize variation of the topic through time
+#' @name when.what
+#' @description create a table of variation of the topic by media
+#' @param test : visualize test (TRUE) or salience (FALSE)
+#' @param minsamp : Threshold of sample size requested for salience computation
+#' @param mintest sample size of estimate for chi-square test (default = 5)
+#' @param title Title of the graphic
+
+
+when.what <- function (hc = hypercube,
+                      test = FALSE,
+                      minsamp = 20,
+                      mintest = 5,
+                      title = "Who says What ?")
+{
+  
+  tab<-hc
+{tab$what <-tab$what !="_no_"}
+  
+  tab<-tab[,list(trial = sum(news),success=round(sum(news*what),0)),by = list(when)]
+  ref <-round(sum(tab$success)/sum(tab$trial),4)
+  tab$null.value<-ref
+  
+  tab<-testchi2(tabtest=tab,
+                minsamp = minsamp,
+                mintest = mintest)
+  
+    if (test==FALSE) {tab$index =tab$salience
+                     tab<-tab[tab$trial > minsamp,]
+                     mycol<-brewer.pal(7,"YlOrRd")
+                     } 
+               else {tab$index=tab$p.value
+                     tab<-tab[tab$trial*tab$null.value>mintest,]
+                      mycol<-rev(brewer.pal(7,"RdYlBu"))
+                      mycol[4]<-"lightyellow"
+                     }
+  
+  
+  p <- plot_ly(tab,
+               x = ~as.character(when),
+               y = ~estimate*100,
+               color= ~index,
+               colors= mycol,
+               hoverinfo = "text",
+               text = ~paste('Time: ',when,
+                             '<br /> Total news  : ', round(trial,0),
+                             '<br /> Topic news : ', round(success,0),
+                             '<br /> % observed  : ', round(estimate*100,2),'%',
+                             '<br /> % estimated : ', round(null.value*100,2),'%',
+                             '<br /> Salience : ', round(salience,2),  
+                             '<br /> p.value : ', round(p.value,4)),
+               type = "bar")  %>%
+    layout(title = title,
+           yaxis = list(title = "% news"),
+           barmode = 'stack')
+  
+  output<-list("table" = tab, "plotly" =p)
+  
+  return(output)
+  
+}
+```
+
+### Example
+
+```{r when.what example}
+hc<-hyper$week
+hc[is.na(hc$when)==F,]
+res_when_what<- when.what(hc=hc, 
+                          test=FALSE,
+                          minsamp=20,
+                          mintest=5,
+                          title = "Migrant news by month - Salience")
+res_when_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+
+res_when_what<- when.what(hc=hc, 
+                          test=TRUE,
+                          minsamp=20,
+                          mintest=5,
+                          title = "Migrant news by month - Significance")
+res_when_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+```
+
+
+## WHERE.WHAT
+
+
+### Function
+
+```{r where.what function, echo = TRUE}
+
+#### ---------------- where.what ----------------
+#' @title  visualize spatialization of the topic 
+#' @name where.what
+#' @description create a table of variation of the topic by media
+#' @param hc an hypercube prepared as data.table
+#' @param test : visualize test (TRUE) or salience (FALSE)
+#' @param minsamp : Threshold of sample size requested for salience computation
+#' @param mintest sample size of estimate for chi-square test (default = 5)
+#' @param map a map with coordinates in lat-long
+#' @param proj a projection accepted by plotly
+#' @param title Title of the graphic
+
+
+where.what <- function (hc = hypercube,
+                        test = FALSE,
+                       minsamp = 20,
+                       mintest = 5,
+                       map = world_ctr,
+                       proj = 'azimuthal equal area',
+                       title = "Where said What ?")
+{
+
+tab<-hc
+tab$what <-tab$what !="_no_"
+
+tab<-tab[,list(trial = round(sum(news),0),success=round(sum(news*what),0)),by = list(where1)]
+ref <-round(sum(tab$success)/sum(tab$trial),4)
+tab$null.value<-ref
+
+  tab<-testchi2(tabtest=tab,
+                minsamp = minsamp,
+                mintest = mintest)
+
+
+
+tab<-tab[order(-chi2),]
+
+
+
+    if (test==FALSE) {tab$index =tab$salience
+                     tab<-tab[tab$trial > minsamp,]
+                     mycol<-brewer.pal(7,"YlOrRd")
+                     } 
+               else {tab$index=tab$p.value
+                     tab<-tab[tab$trial*tab$null.value>mintest,]
+                      mycol<-rev(brewer.pal(7,"RdYlBu"))
+                      mycol[4]<-"lightyellow"
+                     }
+  
+
+map<-merge(map,tab,all.x=T,all.y=F,by.x="ISO3",by.y="where1")
+  
+
+
+#map2<-map[is.na(map$pct)==F,]
+#map2<-st_centroid(map2)
+#map2<-st_drop_geometry(map2)
+
+
+g <- list(showframe = TRUE,
+          framecolor= toRGB("gray20"),
+          coastlinecolor = toRGB("gray20"),
+          showland = TRUE,
+          landcolor = toRGB("gray50"),
+          showcountries = TRUE,
+          countrycolor = toRGB("white"),
+          countrywidth = 0.2,
+         projection = list(type = proj))
+
+
+
+p<- plot_geo(map)%>%
+  add_markers(x = ~lon,
+              y = ~lat,
+              sizes = c(0, 250),
+              size = ~success,
+#             color= ~signif,
+              color = ~index,
+              colors= mycol,
+              hoverinfo = "text",
+              text = ~paste('Location: ',NAME,
+                             '<br /> Total news  : ', round(trial,0),
+                             '<br /> Topic news : ', round(success,0),
+                             '<br /> % observed  : ', round(estimate*100,2),'%',
+                             '<br /> % estimated : ', round(null.value*100,2),'%',
+                             '<br /> Salience : ', round(salience,2),  
+                             '<br /> p.value : ', round(p.value,4))) %>%
+  
+  layout(geo = g,
+         title = title)
+
+p
+
+
+output<-list("table" = tab, "plotly" =p)
+
+return(output)
+
+}
+
+```
+
+
+### Example
+
+```{r where.what example}
+map<-readRDS("map/world_ctr_4326.Rdata")
+hc<-hyper$year
+res_where_what<- where.what(hc=hc,
+                            test=FALSE,
+                            map = map, 
+                            mintest =5,
+                            title = "Migrant news by location - Salience")
+res_where_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+res_where_what<- where.what(hc=hc,
+                            test=TRUE,
+                            map = map, 
+                            mintest =5,
+                            title = "Migrant news by location - Significance")
+res_where_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+```
+
+
+## WHEN.WHO.WHAT
+
+
+### Function
+
+```{r when.who.what function, echo=TRUE}
+
+#### ---------------- when.who.what ----------------
+#' @title  visualize variation of the topic by media through time
+#' @name when.who.what
+#' @description create a table of variation of the topic by media through time
+#' @param hc an hypercube prepared as data.table
+#' @param test : visualize test (TRUE) or salience (FALSE)
+#' @param minsamp : Threshold of sample size requested for salience computation
+#' @param mintest sample size of estimate for chi-square test (default = 5)
+#' @param title Title of the graphic
+
+
+when.who.what <- function (hc = hypercube,
+                           test = FALSE,
+                           minsamp = 20,
+                           mintest = 5,
+                           title = "What by Whom and When ?")
+{
+
+tab<-hc
+tab$what <-tab$what !="_no_"
+tab<-tab[is.na(when)==F,]
+
+
+
+tab<-tab[,list(trial = sum(news),success=round(sum(news*what),0)),by = list(when,who)]
+ref<-tab[,list(null.value = round(sum(success)/sum(trial),4)), by = list(who)]
+tab<-merge(tab,ref,by="who")
+
+  tab<-testchi2(tabtest=tab,
+                minsamp = minsamp,
+                mintest = mintest)
+
+
+    if (test==FALSE) {tab$index =tab$salience
+                     tab<-tab[tab$trial > minsamp,]
+                     mycol<-brewer.pal(7,"YlOrRd")
+                     } 
+               else {tab$index=tab$p.value
+                     tab<-tab[tab$trial*tab$null.value>mintest,]
+                      mycol<-rev(brewer.pal(7,"RdYlBu"))
+                      mycol[4]<-"lightyellow"
+                     }
+
+
+
+ p <- plot_ly(tab,
+  x = ~when,
+  y = ~who,
+  z= ~index,
+  sizes = c(0, 250),
+  size = ~success,
+  colors= mycol,
+  hoverinfo = "text",
+  text = ~paste('Date: ',when,
+                '<br> Media: ',who,
+                '<br /> Total news  : ', round(trial,0),
+                '<br /> Topic news : ', round(success,0),
+                '<br /> % observed  : ', round(estimate*100,2),'%',
+                '<br /> % estimated : ', round(null.value*100,2),'%',
+                '<br /> Salience : ', round(salience,2),  
+                '<br /> p.value : ', round(p.value,4)),
+#  name = ~tags,
+  type = "heatmap")  %>%
+  layout(title = title,
+         yaxis = list(title = "media"),
+         xaxis = list(title = "time"))
+p
+
+
+
+output<-list("table" = tab, "plotly" =p)
+
+return(output)
+
+}
+```
+
+
+### Example
+
+```{r when.who.what example}
+hc<-hyper$month
+res_when_who_what<- when.who.what(hc=hc,
+                                  test = FALSE,
+                                  minsamp = 20,
+                                  mintest = 5,
+                                  title = "Migrant news through time by media - Salience")
+res_when_who_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+
+res_when_who_what<- when.who.what(hc=hc,
+                                  test = TRUE,
+                                  minsamp = 20,
+                                  mintest = 5,
+                                  title = "Migrant news through time by media - Significance")
+res_when_who_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+```
+
+
+## WHERE.WHO.WHAT
+
+
+### Function
+
+```{r where.who.what function, echo=TRUE}
+
+#### ---------------- where.who.what ----------------
+#' @title  visualize variation of the topic by location and media
+#' @name where.who.what
+#' @description create a table of variation of the topic by location and media
+#' @param hc an hypercube prepared as data.table
+#' @param maxloc maximum number of location
+#' @param test : visualize test (TRUE) or salience (FALSE)
+#' @param minsamp : Threshold of sample size requested for salience computation
+#' @param mintest sample size of estimate for chi-square test
+#' @param title Title of the graphic
+
+
+where.who.what <- function (hc = hypercube,
+                           maxloc = 15,
+                           test = FALSE,
+                           minsamp=20,
+                           mintest = 5,
+                           title = "What by Whom and Where ?")
+{
+
+tab<-hc
+tab$what <-tab$what !="_no_"
+
+tab<-tab[,list(trial = sum(news),success=round(sum(news*what),0)),by = list(where1,who)]
+ref<-tab[,list(null.value = round(sum(success)/sum(trial),4)), by = list(who)]
+tab<-merge(tab,ref,by="who")
+
+# selection
+sel<-tab[,list(success = sum(success)), by = list(where1)]
+sel<-sel[order(-success),]
+sel<- sel[1:maxloc,]
+tab<-tab[where1 %in% sel$where1,]
+tab$trial<-round(tab$trial,0)
+tab$success<-round(tab$success,0)
+
+
+  tab<-testchi2(tabtest=tab,
+                minsamp = minsamp,
+                mintest = mintest)
+
+
+    if (test==FALSE) {tab$index =tab$salience
+                     tab<-tab[tab$trial > minsamp,]
+                     mycol<-brewer.pal(7,"YlOrRd")
+                     } 
+               else {tab$index=tab$p.value
+                     tab<-tab[tab$trial*tab$null.value>mintest,]
+                      mycol<-rev(brewer.pal(7,"RdYlBu"))
+                      mycol[4]<-"lightyellow"
+                     }
+
+
+
+
+ p <- plot_ly(tab,
+  x = ~where1,
+  y = ~who,
+  z= ~index,
+  sizes = c(0, 250),
+  size = ~success,
+  colors= mycol,
+  hoverinfo = "text",
+  text = ~paste('Location: ',where1,
+                '<br>Media: ',who,
+                '<br /> Total news  : ', round(trial,0),
+                '<br /> Topic news : ', round(success,0),
+                '<br /> % observed  : ', round(estimate*100,2),'%',
+                '<br /> % estimated : ', round(null.value*100,2),'%',
+                '<br /> Salience : ', round(salience,2),  
+                '<br /> p.value : ', round(p.value,4)),
+#  name = ~tags,
+  type = "heatmap")  %>%
+  layout(title = title,
+         yaxis = list(title = "Host media"),
+         xaxis = list(title = "Guest countries"))
+
+
+
+
+output<-list("table" = tab, "plotly" =p)
+
+return(output)
+
+}
+```
+
+
+### Example
+
+```{r where.who.what example}
+hc<-hyper$year
+res_where_who_what<- where.who.what(hc= hc,
+                                    maxloc= 20,
+                                    test=FALSE,
+                                    minsamp=20,
+                                    mintest=5,
+                                    title = "Migrant news by media and location - Salience")
+res_where_who_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+
+res_where_who_what<- where.who.what(hc= hc,
+                                    maxloc= 20,
+                                    test=TRUE,
+                                    minsamp=20,
+                                    mintest=5,
+                                    title = "Migrant news by media and location- Significance")
+res_where_who_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+```
+
+
+## WHEN.WHERE.WHAT
+
+
+### Function
+
+```{r when.where.what function, echo=TRUE}
+#### ---------------- when.where.what ----------------
+#' @title  visualize variation of the topic by location through time
+#' @name when.where.what
+#' @description create a table of variation of the topic by location through time
+#' @param hc an hypercube prepared as data.table
+#' @param maxloc maximum number of location
+#' @param test : visualize test (TRUE) or salience (FALSE)
+#' @param minsamp : Threshold of sample size requested for salience computation
+#' @param mintest sample size of estimate for chi-square test
+#' @param title Title of the graphic
+
+
+when.where.what <- function (hc = hypercube,
+                           maxloc = 15,
+                           test = FALSE,
+                           minsamp=20,
+                           mintest = 5,
+                           title = "What, Where and When ?")
+{
+
+tab<-hc
+tab$what <-tab$what !="_no_"
+
+tab<-tab[,list(trial = sum(news),success=round(sum(news*what),0)),by = list(where1,when)]
+ref<-tab[,list(null.value = round(sum(success)/sum(trial),4)), by = list(where1)]
+tab<-merge(tab,ref,by="where1")
+
+# selection
+sel<-tab[,list(success = sum(success)), by = list(where1)]
+sel<-sel[order(-success),]
+sel<- sel[1:maxloc,]
+tab<-tab[where1 %in% sel$where1,]
+tab$trial<-round(tab$trial,0)
+tab$success<-round(tab$success,0)
+
+  tab<-testchi2(tabtest=tab,
+                minsamp = minsamp,
+                mintest = mintest)
+
+
+    if (test==FALSE) {tab$index =tab$salience
+                     tab<-tab[tab$trial > minsamp,]
+                     mycol<-brewer.pal(7,"YlOrRd")
+                     } 
+               else {tab$index=tab$p.value
+                     tab<-tab[tab$trial*tab$null.value>mintest,]
+                      mycol<-rev(brewer.pal(7,"RdYlBu"))
+                      mycol[4]<-"lightyellow"
+                     }
+
+
+
+ p <- plot_ly(tab,
+  x = ~when,
+  y = ~where1,
+  z= ~index,
+  sizes = c(0, 250),
+  size = ~success,
+  colors= mycol,
+  hoverinfo = "text",
+  text = ~paste('Location: ',where1,
+                '<br>Date: ',when,
+                '<br /> Total news  : ', round(trial,0),
+                '<br /> Topic news : ', round(success,0),
+                '<br /> % observed  : ', round(estimate*100,2),'%',
+                '<br /> % estimated : ', round(null.value*100,2),'%',
+                '<br /> Salience : ', round(salience,2),  
+                '<br /> p.value : ', round(p.value,4)),
+#  name = ~tags,
+  type = "heatmap")  %>%
+  layout(title = title,
+         yaxis = list(title = "Guest countries"),
+         xaxis = list(title = "Time"))
+
+p
+
+output<-list("table" = tab, "plotly" =p)
+
+return(output)
+}
+```
+
+
+### Example
+
+```{r when.where.what example}
+hc<-hyper$month
+res_when_where_what<- when.where.what(hc=hc,
+                                    maxloc= 15,
+                                    test=FALSE,
+                                    minsamp=20,
+                                    mintest=5,
+                                    title = "Migrant news by location through time - Salience")
+res_when_where_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+res_when_where_what<- when.where.what(hc=hc,
+                                    maxloc= 15,
+                                    test=TRUE,
+                                    minsamp=20,
+                                    mintest=5,
+                                    title = "Migrant news by location through time - Significance")
+res_when_where_what$plotly %>% layout(autosize = F, width = 800, height = 500)
+
+```
+
+
+
+
+## WHERE.WHERE.WHAT
+
+
+### Function
+
+```{r where.where.what function, echo=TRUE}
+
+#### ---------------- where.where.what ----------------
+#' @title  visualize variation of the topic by co-location 
+#' @name where.where.what
+#' @description create a table of variation of the topic by co-location
+#' @param hc an hypercube prepared as data.table
+#' @param test : visualize test (TRUE) or salience (FALSE)
+#' @param minsamp : Threshold of sample size requested for salience computation
+#' @param mintest minimum expected size of news for test
+#' @param minedge minimum news with topic by edge
+#' @param minnode minimum news with topic by node
+#' @param title Title of the graphic
+
+
+where.where.what <- function (hc = hypercube,
+                           test=FALSE,
+                           minsamp = 20,
+                           mintest = 5,
+                           minedge = 2,
+                           minnode = 10,
+                           title = "What, Where and Where ?")
+{
+
+  #test...
+
+  
+  
+  
+tab<-hc
+tab$what <-tab$what !="_no_"
+
+# Palette
+
+
+# Create edges
+tab1<-tab[where1 !=where2,list(trial = sum(news),success=round(sum(news*what),0)),by = list(where1,where2)]
+tab1$null.value<-sum(tab1$success)/sum(tab1$trial)
+
+tab1<-testchi2(tabtest=tab1,
+              minsamp = minsamp,
+              mintest = mintest)
+
+    if (test==FALSE) {tab1$index =tab1$salience
+                     tab1<-tab1[tab1$trial > minsamp,]
+                     mycol<-brewer.pal(7,"YlOrRd") }  else
+                       {tab1$index=tab1$p.value
+                     tab1<-tab1[tab1$trial*tab1$null.value>mintest,]
+                      mycol<-rev(brewer.pal(7,"RdYlBu"))
+                      mycol[4]<-"lightyellow"
+                     }
+
+
+
+
+tab1<-tab1[order(success),]
+
+# Create nodes
+tab2<-tab[where1 !=where2,list(trial = sum(news),success=round(sum(news*what),0)),by = list(where1)]
+tab2$null.value<-sum(tab2$success)/sum(tab2$trial)
+tab2<-testchi2(tabtest=tab2,
+                minsamp = minsamp,
+                mintest = mintest)
+
+    if (test==FALSE) {tab2$index =tab2$salience
+                     tab2<-tab2[tab2$trial > minsamp,]
+                     mycol<-brewer.pal(7,"YlOrRd") }  else
+                       {tab2$index=tab2$p.value
+                     tab2<-tab2[tab2$trial*tab2$null.value>mintest,]
+                      mycol<-rev(brewer.pal(7,"RdYlBu"))
+                      mycol[4]<-"lightyellow"
+                     }
+
+tab2<-tab2[order(success),]
+
+
+
+
+# Build tibble graph object
+tib_g=tidygraph::tbl_graph(nodes=tab2,edges=tab1) 
+
+# filter
+sel_tib_g <-tib_g %>% activate(edges) %>%
+                      filter(success > minedge) %>%
+                      activate(nodes) %>%
+                      filter(success > minnode) %>%
+                      mutate(isol = node_is_isolated()) %>%
+                      filter(isol == FALSE)
+
+## Create a ggraph layout
+g=sel_tib_g %>% 
+   ggraph(layout="stress")
+
+# visualize
+gg<-g + geom_edge_link(aes(edge_width=success, edge_colour = index),
+                   alpha = 0.3 , show.legend=c(TRUE,FALSE,FALSE, FALSE,FALSE)) +
+        scale_edge_colour_gradientn(colors = mycol)+
+   geom_node_point(aes(colour = index, size=success), 
+                  alpha=0.6) +
+        scale_color_gradientn(colors =mycol)+
+  geom_node_label(aes(label = where1, size = 2*sqrt(success)),alpha =1,label.size=0.1,show.legend = FALSE)
+
+
+output<-list("table" = tab1, "plot" =gg)
+
+return(output)
+}
+```
+
+### Example
+```{r where.where.what example}
+
+res_where_where_what<- where.where.what(hc=hyper$year,
+                                        test=FALSE,
+                                         mintest = 5,
+                                         minsamp = 10,
+                                         minedge = 1,
+                                         minnode = 2,
+                                         title = "Network of news about topic - Salience")
+res_where_where_what$plot 
+
+res_where_where_what<- where.where.what(hc=hyper$year,
+                                        test=TRUE,
+                                         mintest = 5,
+                                         minsamp = 10,
+                                         minedge = 1,
+                                         minnode =2,
+                                         title = "Network of news about topic - Significance")
+res_where_where_what$plot 
+
+
+```

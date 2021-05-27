@@ -1,0 +1,21 @@
+country;media;web;name
+DEU;DEU_tagspi;https://www.tagesspiegel.de/;Tagespiegel
+DEU;DEU_frankf;http://www.faz.net/;FAZ
+DEU;DEU_suddeu;http://www.sueddeutsche.de/;Süd. Zeitung
+DEU;DEU_diewel;https://www.welt.de/;Die Welt
+ESP;ESP_abcxxx;http://www.abc.es/;ABC
+ESP;ESP_percat;http://www.elperiodico.com/es/;Periodico de Cat.
+ESP;ESP_vangua;https://www.lavanguardia.com/;La Vanguardia
+ESP;ESP_mundo;https://www.elmundo.es/;El Mundo
+FRA;FRA_figaro;http://www.lefigaro.fr/;Le Figaro
+FRA;FRA_lacroi;http://www.la-croix.com/;La Croix
+FRA;FRA_libera;http://liberation.fr/;Libération
+FRA;FRA_lmonde;http://www.lemonde.fr/;Le Monde
+GBR;GBR_guardi;http://www.theguardian.com/uk;The Guardian
+GBR;GBR_indept;http://www.independent.co.uk/;The Independent
+GBR;GBR_mirror;http://www.mirror.co.uk/;The Mirror
+GBR;GBR_dailyt;https://www.telegraph.co.uk/;The Telegraph
+ITA;ITA_mattin;http://www.ilmattino.it;Il Mattino
+ITA;ITA_messag;http://www.ilmessaggero.it/;Il Messaggero
+ITA;ITA_repubb;http://www.repubblica.it/;La Repubblica
+ITA;ITA_stampa;http://www.lastampa.it/;La Stampa
