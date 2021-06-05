@@ -659,7 +659,7 @@ where.where.what <- function (hc = hypercube,
     geom_node_point(aes(colour = index, size=success), 
                     alpha=0.6) +
     scale_color_gradientn(colors =mycol)+
-    geom_node_label(aes(label = where1, size = 2*sqrt(success)),alpha =1,label.size=0.1,show.legend = FALSE)
+    geom_node_label(aes(label = where1, size = 10*sqrt(success)),alpha =1,label.size=0.1,show.legend = FALSE)
   
   
   output<-list("table" = tab1, "plot" =gg)
