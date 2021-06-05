@@ -1,7 +1,7 @@
 ---
-title: "TELEMACHOS - Version 2.1"
-subtitle: "Supplementary material"
-author: "Claude Grasland"
+title: "TELEMAC (Topic Explorator Lab of European Media Agenda applied to Crisis)"
+subtitle: "Version 2.2 - June 2021"
+author: "Claude Grasland, Université de Paris"
 output: html_document
 ---
 
@@ -51,7 +51,7 @@ hyper$year<-sel[, list(news=sum(news)),by =list(order,who, when, where1, where2,
 
 
 
-This notebook present the functions used by the interface TELEMAC presented in the paper published in the journal *Frontiers*
+This notebook present the functions used by the interface TELEMAC presented in the paper published in the journal *Frontiers* and available at https://analytics.huma-num.fr/Claude.Grasland/telemac/ 
 
 # DATA COLLECTION
 
