@@ -1,0 +1,507 @@
+---
+title: "MODELS USED IN FRONTIER'S PAPER"
+author: "Claude Grasland, Université de Paris"
+subtitle: Version 1.0 - August 2021
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, error = FALSE)
+library(sf)
+library(plotly)
+library(RColorBrewer)
+library(data.table)
+library(DT)
+library(dplyr)
+library(cartography)
+library(knitr)
+library(tidygraph)
+library(ggraph)
+library(ggplot2)
+library(stargazer)
+#library(reldist)
+#library(quanteda)
+
+#load hypercube by weeks
+hc <- readRDS("data/hc_EUR_foreign_mobil_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-12-31"),]
+hc<-hc[hc$when<as.Date("2020-07-01"),]
+hc<-hc[is.na(hc$when)==FALSE,]
+hcmigr<-hc
+
+hc <- readRDS("data/hc_EUR_foreign_border_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-12-31"),]
+hc<-hc[hc$when<as.Date("2020-07-01"),]
+hc<-hc[is.na(hc$when)==FALSE,]
+hcbord<-hc
+
+hc <- readRDS("data/hc_EUR_foreign_pandemic_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-12-31"),]
+hc<-hc[hc$when<as.Date("2020-07-01"),]
+hc<-hc[is.na(hc$when)==FALSE,]
+hcpand<-hc
+
+
+# Load functions
+
+source("pgm/hypernews_functions_V4.R")
+```
+
+
+## Model I : National effect / What =f(who-what)
+
+Our first model will test the existence of comparable levels of interest for geopolitical topics in the different media of different countries. It is not really a research hypothesis but rather a control on the joint choice of media and topics linked to the choice of keywords. We assume therefore H1 : 
+
+- **H1 : The global level of interest of media for a geopolitical topic is not related to the country where the media is located.**
+
+
+
+
+
+### Migrants
+
+```{r Model.What.Who-Where/Mig}
+hc<-hcmigr
+# table
+dt<-who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+
+
+# Variance analysis
+modmig1 <-lm(formula = estimate~country,
+           data=dt)
+
+
+```
+
+In the case of the migrant topic, H1 is not fully verified and we can observe a national effect but with a low level of significance (p = 0.047). This effetc is mainly related to an over-representation of the migrant topic in german outlets, with an average value of 2.67% of foreign news which is significantly higher than the levels observed in media outlets from Spain (1.66%), Italy and United Kingdom but not signifcantly different from the level observed in France. 
+
+
+### Borders
+
+```{r Model.What.Who-Where/mig}
+hc<-hcbord
+# table
+dt<-who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+
+
+# Variance analysis
+modbord1 <-lm(formula = estimate~country,
+           data=dt)
+summary(modbord1)
+
+```
+
+In the case of the border topic, H1 is verified and no significant differences are observed between outlets according to their country of location (p = 0.143). The global level of interest is twice lower as in the case of migrants with only 1% of foreign news in average.
+
+### Pandemics (1)
+
+```{r Model.What.Who-Where/pand1}
+hc<-hcpand
+# table
+dt<-who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+
+
+# Variance analysis
+modpand1 <-lm(formula = estimate~country,
+           data=dt)
+summary(modpand1)
+
+```
+
+In the case of pandemics, no significant differences can be observed for the whole sample of media, but significant differences could be observed between the samples of german and spanish newspapers when isolated. 
+
+
+
+### Pandemics (2)
+
+```{r Model.What.Who-Where/pand2}
+hc<-hcpand
+hc<-hc[hc$when<as.Date("2020-01-01"),]
+# table
+dt<-who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+
+
+# Variance analysis
+modpand1bis <-lm(formula = estimate~country,
+           data=dt)
+summary(modpand1bis)
+
+```
+
+The fact to exclude the first semester of 2020 does not really change the results.
+
+### synthesis
+
+```{r}
+stargazer(modbord1,modmig1,modpand1,modpand1bis,
+          dep.var.labels=c("Borders","Migrants","Pandemics", "Pandemics(1)"),
+          covariate.labels=c("Spanish media","French Media","Italian Media","UK Media"), 
+          style = "apsr"
+          )
+```
+% Table created by stargazer v.5.2.2 by Marek Hlavac, Harvard University. E-mail: hlavac at fas.harvard.edu
+% Date and time: Lun, aoû 23, 2021 - 17:54:46
+\begin{table}[!htbp] \centering 
+  \caption{} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}}lcccc} 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+ & \multicolumn{4}{c}{\textit{Dependent variable:}} \\ 
+\cline{2-5} 
+\\[-1.8ex] & \multicolumn{4}{c}{estimate} \\ 
+\\[-1.8ex] & (1) & (2) & (3) & (4)\\ 
+\hline \\[-1.8ex] 
+ countryESP & 0.001 & $-$0.010$^{***}$ & 0.019$^{***}$ & 0.002$^{*}$ \\ 
+  & (0.002) & (0.003) & (0.006) & (0.001) \\ 
+  & & & & \\ 
+ countryFRA & 0.0001 & $-$0.004 & 0.012$^{*}$ & 0.002$^{**}$ \\ 
+  & (0.002) & (0.003) & (0.006) & (0.001) \\ 
+  & & & & \\ 
+ countryGBR & $-$0.002 & $-$0.008$^{**}$ & 0.009 & 0.002$^{*}$ \\ 
+  & (0.002) & (0.003) & (0.006) & (0.001) \\ 
+  & & & & \\ 
+ countryITA & $-$0.004$^{*}$ & $-$0.008$^{**}$ & 0.011$^{*}$ & 0.001 \\ 
+  & (0.002) & (0.003) & (0.006) & (0.001) \\ 
+  & & & & \\ 
+ Constant & 0.011$^{***}$ & 0.027$^{***}$ & 0.006 & 0.003$^{***}$ \\ 
+  & (0.001) & (0.002) & (0.004) & (0.001) \\ 
+  & & & & \\ 
+\hline \\[-1.8ex] 
+Observations & 20 & 20 & 20 & 20 \\ 
+R$^{2}$ & 0.349 & 0.455 & 0.377 & 0.396 \\ 
+Adjusted R$^{2}$ & 0.175 & 0.309 & 0.211 & 0.235 \\ 
+Residual Std. Error (df = 15) & 0.003 & 0.005 & 0.009 & 0.001 \\ 
+F Statistic (df = 4; 15) & 2.006 & 3.125$^{**}$ & 2.272 & 2.461$^{*}$ \\ 
+\hline 
+\hline \\[-1.8ex] 
+\textit{Note:}  & \multicolumn{4}{r}{$^{*}$p$<$0.1; $^{**}$p$<$0.05; $^{***}$p$<$0.01} \\ 
+\end{tabular} 
+\end{table} 
+
+
+
+
+
+## Model 2 : National effect / What = (When, Who-Where)
+
+Our second hypothesis is related to the temporal dimension of the geopolitical agenda. We assume that, all things being equal with the global level of interest for a geopolitical topic, the distribution of the period of interest is influenced by national agenda which produce significant differences in the timeline of the topic over the period of observation. H2 can therefore be formulated as :
+
+- **H2 : The variation of the salience of a geopolitical topic through time is influenced by national agenda. The correlation of the timeline is higher between media of the same country than between media of different country**
+
+To verify H2, we build a correlation matrix between the levels of salience of the 20 media outlets (using pairwise complete observation when missing data are present) and we compare the distribution of the level of correlation for media located in the same country and media located in different countries with variance analysis and Fisher test.
+
+### Migrant
+
+```{r Model.What.Who-Where.when / migrant}
+
+hc<-hcmigr
+# table
+dt<-when.who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+dt$week<-as.character(dt$when)
+
+# Poisson model (1)
+#mod1<-glm(formula = success~trial+week+country+who,
+#          family = "poisson",
+#          data = dt)
+#anova(mod1)  
+
+# Correlation analysis
+
+x<-data.frame(dt[,c("who","country","estimate", "when")])
+y<-reshape2::dcast(x,formula = when~who,value.var = "estimate")
+m<-y[,-1]
+row.names(m)<-y$when
+cor<-cor(m,method ="pearson",use="pairwise.complete.obs")
+col<-melt(cor)
+col<-col[col$Var1!=col$Var2,]
+col$country<-as.factor(substr(col$Var1,4,6)==substr(col$Var2,4,6))
+levels(col$country)<-c("Different","Same")
+boxplot(value~country,data=col,horizontal=T)
+
+mod2<-lm(value~country,data=col)
+summary(mod2)
+
+```
+
+In the case of migrant topic, the average correlation between media of different countries is equal to +0.53 against +0.66 in the case of media located in the same country. Taking into account the variance observed in the sample, these differences appears strongly significant (F = 37.6, df = (1,378), p < 0.001)
+
+
+
+
+### Borders
+
+```{r Model.What.Who-Where.when / border}
+
+hc<-hcbord
+# table
+dt<-when.who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+dt$week<-as.character(dt$when)
+
+# Poisson model (1)
+#mod1<-glm(formula = success~trial+week+country+who,
+#          family = "poisson",
+#          data = dt)
+#anova(mod1)  
+
+# Correlation analysis
+
+x<-data.frame(dt[,c("who","country","estimate", "when")])
+y<-reshape2::dcast(x,formula = when~who,value.var = "estimate")
+m<-y[,-1]
+row.names(m)<-y$when
+cor<-cor(m,method ="pearson",use="pairwise.complete.obs")
+col<-melt(cor)
+col<-col[col$Var1!=col$Var2,]
+col$country<-as.factor(substr(col$Var1,4,6)==substr(col$Var2,4,6))
+levels(col$country)<-c("Different","Same")
+boxplot(value~country,data=col,horizontal=T)
+
+mod2<-lm(value~country,data=col)
+summary(mod2)
+
+```
+
+In the case of border, the global level of correlation is lower but the national differences appears much more significant with only +0.28 in the case of media located in different countries against +0.44 for media located in different countries (F = 99.4, df = (1,378) , p < 0.001)
+
+### Pandemic (1)
+
+```{r Model.What.Who-Where.when / pandemic1}
+
+hc<-hcpand
+# table
+dt<-when.who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+dt$week<-as.character(dt$when)
+
+# Poisson model (1)
+#mod1<-glm(formula = success~trial+week+country+who,
+#          family = "poisson",
+#          data = dt)
+#anova(mod1)  
+
+# Correlation analysis
+
+x<-data.frame(dt[,c("who","country","estimate", "when")])
+y<-reshape2::dcast(x,formula = when~who,value.var = "estimate")
+m<-y[,-1]
+row.names(m)<-y$when
+cor<-cor(m,method ="pearson",use="pairwise.complete.obs")
+col<-melt(cor)
+col<-col[col$Var1!=col$Var2,]
+col$country<-as.factor(substr(col$Var1,4,6)==substr(col$Var2,4,6))
+levels(col$country)<-c("Different","Same")
+boxplot(value~country,data=col,horizontal=T)
+
+mod2<-lm(value~country,data=col)
+summary(mod2)
+
+```
+
+In the case of pandemic, the correlation is extremely high (0.86) because of the common perturbation observed in spring 2020 which appears in all newspaper as an exceptional jump. As a result, no significant differences can be observed between media located in the same country (+0.88) or in different countries (+0.83) and we can conclude to the existence of a global event which is not organized at national level in terms of geopolitical agenda.
+
+
+### Pandemic (2)
+
+```{r Model.What.Who-Where.when / pandemic2}
+
+hc<-hcpand
+hc<-hc[hc$when<as.Date("2020-01-01"),]
+# table
+dt<-when.who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+dt$week<-as.character(dt$when)
+
+# Poisson model (1)
+#mod1<-glm(formula = success~trial+week+country+who,
+#          family = "poisson",
+#          data = dt)
+#anova(mod1)  
+
+# Correlation analysis
+
+x<-data.frame(dt[,c("who","country","estimate", "when")])
+y<-reshape2::dcast(x,formula = when~who,value.var = "estimate")
+m<-y[,-1]
+row.names(m)<-y$when
+cor<-cor(m,method ="pearson",use="pairwise.complete.obs")
+col<-melt(cor)
+col<-col[col$Var1!=col$Var2,]
+col$country<-as.factor(substr(col$Var1,4,6)==substr(col$Var2,4,6))
+levels(col$country)<-c("Different","Same")
+boxplot(value~country,data=col,horizontal=T)
+
+mod2<-lm(value~country,data=col)
+summary(mod2)
+
+```
+
+If we exclude the first semester of 2020, the conclusions are not modified because the pandemic curve of the countries remains strongly determined by the peaks of Ebola (2014) and Zyka (2017 ?). The correlation is of course lower but not significantly higher for media of the same country (+0.59) as compared to media of different countries (+0.55) because of strong dispersion. 
+
+
+## Model 3 : National effect / What = (Where, Who-Where)
+
+We turn now to the second dimension of the geopolitical agenda which is related to the choice of foreign countries mentionned in news related to a geopolitcal topic. The fact to use a relatively long period is particularly interesti,ng in this case because it can help us to have a more structural view than an event oriiented approach. It is clear for example that all media outlets has mentioned Turkey and Greece in relation with the migrant topic in september 2015. But it is not so obvious that media of each countries has mentionned these countries in relation with migrant *before* or *after* the period of maximal interest. For the same reason, it is not obvious that media of all countries has offered the same coverage of migrant crisis located outside Europe and its neighborhood like the Rohyngias crisis or the wall established by D. Trump. It is the reason why it can be interested to introduce our third hypothesis as follow. 
+
+- **H3 : Over a sufficiently long period of time the choice of foreign countries associated to  geopolitical topic is influenced by national perceptions of newsworthiness. The correlation between the spatial distribution  of coutnries mentionned in relation with a topic is higher between media of the same country than between media of different country**
+
+
+
+### Migrant
+
+```{r Model.What.Who-Where.where / migrant}
+
+hc<-hcmigr
+# table
+dt<-where.who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+dt$where<-dt$where1
+dt<-dt[!(dt$where %in% c("FRA","ESP","ITA","DEU","GBR")),]
+
+# Poisson model (1)
+#mod1<-glm(formula = success~trial+week+country+who,
+#          family = "poisson",
+#          data = dt)
+#anova(mod1)  
+
+# Correlation analysis
+
+x<-data.frame(dt[,c("who","country","estimate", "where")])
+y<-reshape2::dcast(x,formula = where~who,value.var = "estimate")
+m<-y[,-1]
+row.names(m)<-y$where
+cor<-cor(m,method ="pearson",use="pairwise.complete.obs")
+col<-melt(cor)
+col<-col[col$Var1!=col$Var2,]
+col$country<-as.factor(substr(col$Var1,4,6)==substr(col$Var2,4,6))
+levels(col$country)<-c("Different","Same")
+boxplot(value~country,data=col,horizontal=T)
+
+mod2<-lm(value~country,data=col)
+summary(mod2)
+col$residual<-mod2$residual
+
+```
+
+In the case of migrant's topic, we observe a very strong correlation between the geopolitical maps of newspapers. In all media, the countries that has been the most associated to trhe migrant topic in relative terms are the same (Greece, Hungary, Turkey). But some specificities appears and finally the correlation si significantky larger between media of the same country (+0.91) and media of different countries  (p < 0.001)
+
+
+### Borders
+
+```{r Model.What.Who-Where.where / border}
+
+hc<-hcbord
+# table
+dt<-where.who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+dt$where<-dt$where1
+dt<-dt[!(dt$where %in% c("FRA","ESP","ITA","DEU","GBR")),]
+
+# Poisson model (1)
+#mod1<-glm(formula = success~trial+week+country+who,
+#          family = "poisson",
+#          data = dt)
+#anova(mod1)  
+
+# Correlation analysis
+
+x<-data.frame(dt[,c("who","country","estimate", "where")])
+y<-reshape2::dcast(x,formula = where~who,value.var = "estimate")
+m<-y[,-1]
+row.names(m)<-y$where
+cor<-cor(m,method ="pearson",use="pairwise.complete.obs")
+col<-melt(cor)
+col<-col[col$Var1!=col$Var2,]
+col$country<-as.factor(substr(col$Var1,4,6)==substr(col$Var2,4,6))
+levels(col$country)<-c("Different","Same")
+boxplot(value~country,data=col,horizontal=T)
+
+mod2<-lm(value~country,data=col)
+summary(mod2)
+col$residual<-mod2$residual
+
+```
+
+### Pandemic (1)
+
+```{r Model.What.Who-Where.where / pandemic1}
+
+hc<-hcpand
+# table
+dt<-where.who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+dt$where<-dt$where1
+dt<-dt[!(dt$where %in% c("FRA","ESP","ITA","DEU","GBR")),]
+
+# Poisson model (1)
+#mod1<-glm(formula = success~trial+week+country+who,
+#          family = "poisson",
+#          data = dt)
+#anova(mod1)  
+
+# Correlation analysis
+
+x<-data.frame(dt[,c("who","country","estimate", "where")])
+y<-reshape2::dcast(x,formula = where~who,value.var = "estimate")
+m<-y[,-1]
+row.names(m)<-y$where
+cor<-cor(m,method ="pearson",use="pairwise.complete.obs")
+col<-melt(cor)
+col<-col[col$Var1!=col$Var2,]
+col$country<-as.factor(substr(col$Var1,4,6)==substr(col$Var2,4,6))
+levels(col$country)<-c("Different","Same")
+boxplot(value~country,data=col,horizontal=T)
+
+mod2<-lm(value~country,data=col)
+summary(mod2)
+col$residual<-mod2$residual
+
+```
+
+### Pandemic (2)
+
+```{r Model.What.Who-Where.where / pandemic2}
+
+hc<-hcpand
+hc<-hc[hc$when<as.Date("2020-01-01"),]
+# table
+dt<-where.who.what(hc)$table
+dt$country<-substr(dt$who,4,6)
+dt$where<-dt$where1
+dt<-dt[!(dt$where %in% c("FRA","ESP","ITA","DEU","GBR")),]
+
+# Poisson model (1)
+#mod1<-glm(formula = success~trial+week+country+who,
+#          family = "poisson",
+#          data = dt)
+#anova(mod1)  
+
+# Correlation analysis
+
+x<-data.frame(dt[,c("who","country","estimate", "where")])
+y<-reshape2::dcast(x,formula = where~who,value.var = "estimate")
+m<-y[,-1]
+row.names(m)<-y$where
+cor<-cor(m,method ="pearson",use="pairwise.complete.obs")
+col<-melt(cor)
+col<-col[col$Var1!=col$Var2,]
+col$country<-as.factor(substr(col$Var1,4,6)==substr(col$Var2,4,6))
+levels(col$country)<-c("Different","Same")
+boxplot(value~country,data=col,horizontal=T)
+
+mod2<-lm(value~country,data=col)
+summary(mod2)
+col$residual<-mod2$residual
+
+```
+
