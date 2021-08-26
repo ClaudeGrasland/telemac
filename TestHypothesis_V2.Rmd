@@ -512,4 +512,153 @@ stargazer(mod1b, mod2b,mod3b)
 ```
 
 
+## Model 4 : Spatial synchronization
 
+
+
+
+### Borders
+
+```{r}
+#prepare data
+hc <- readRDS("data/hc_EUR_foreign_border_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc<-hc[is.na(hc$when)==FALSE,]
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror"),]
+ hc$when<-cut(hc$when, breaks="quarter")
+ hc$country<-substr(hc$who,4,6)
+ 
+ 
+ dt<-hc[what!="_no_",list(news=sum(news)), list(country, where1, when)]
+ dt<-dcast(dt, formula = when+where1~country, fill=0)
+
+ dt<-dt[!(where1 %in% c("ESP","DEU","FRA","ITA","GBR")),]
+ # Compute correlation
+ res<-dt %>% group_by(when) %>%
+             summarize(DEU.FRA= cor(FRA, DEU),
+                       DEU.GBR = cor(DEU,GBR),
+                       DEU.ESP = cor(DEU,ESP),
+                      DEU.ITA = cor(DEU,ITA),
+                       ESP.FRA = cor(FRA,ESP),
+                        ESP.GBR = cor(ESP, GBR),
+                       ESP.ITA = cor(ESP,ITA),
+                        FRA.ITA = cor(FRA,ITA),
+                        FRA.GBR = cor(FRA,GBR),
+                       ITA.GBR = cor(ITA, GBR))
+ res$when<-as.Date(res$when)+45
+ 
+ 
+ library(tidyverse)
+ res<-pivot_longer(res,cols = 2:11)
+ refmean<-mean(res$value)
+ 
+ # diagram 
+ ggplot(res, aes(x=when, y=value, color = name))+
+   geom_line()+
+   geom_point(colour="black", size=1)+
+   scale_x_date(name = "Period of time (quarters)",breaks=as.Date(c("2014-01-01","2015-01-01","2016-01-01",
+                                  "2017-01-01","2018-01-01","2019-01-01","2020-01-01")),
+                minor_breaks = NULL)+
+     scale_y_continuous(name = "Pearson correlation of spatial distribution",breaks=c(0,0.2,0.4,0.6,0.8,1), limits = c(0,1))+
+   geom_hline(yintercept=refmean, color="black",lwd=1)+ 
+   geom_text(aes(label="Trump Wall", x=as.Date("2017-02-15"),y=1), colour="black")
+```
+
+
+### Migrants
+
+```{r}
+#prepare data
+hc <- readRDS("data/hc_EUR_foreign_mobil_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc<-hc[is.na(hc$when)==FALSE,]
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror"),]
+ hc$when<-cut(hc$when, breaks="quarter")
+ hc$country<-substr(hc$who,4,6)
+ 
+ 
+ dt<-hc[what!="_no_",list(news=sum(news)), list(country, where1, when)]
+ dt<-dcast(dt, formula = when+where1~country, fill=0)
+
+ dt<-dt[!(where1 %in% c("ESP","DEU","FRA","ITA","GBR")),]
+ # Compute correlation
+ res<-dt %>% group_by(when) %>%
+             summarize(DEU.FRA= cor(FRA, DEU),
+                       DEU.GBR = cor(DEU,GBR),
+                       DEU.ESP = cor(DEU,ESP),
+                      DEU.ITA = cor(DEU,ITA),
+                       ESP.FRA = cor(FRA,ESP),
+                        ESP.GBR = cor(ESP, GBR),
+                       ESP.ITA = cor(ESP,ITA),
+                        FRA.ITA = cor(FRA,ITA),
+                        FRA.GBR = cor(FRA,GBR),
+                       ITA.GBR = cor(ITA, GBR))
+ res$when<-as.Date(res$when)+45
+ 
+ 
+ library(tidyverse)
+ res<-pivot_longer(res,cols = 2:11)
+ refmean<-mean(res$value)
+ 
+ # diagram 
+ ggplot(res, aes(x=when, y=value, color = name))+
+   geom_line()+
+   geom_point(colour="black", size=1)+
+   scale_x_date(name = "Period of time (quarters)",breaks=as.Date(c("2014-01-01","2015-01-01","2016-01-01",
+                                  "2017-01-01","2018-01-01","2019-01-01","2020-01-01")),
+                minor_breaks = NULL)+
+     scale_y_continuous(name = "Pearson correlation of spatial distribution",breaks=c(0,0.2,0.4,0.6,0.8,1), limits = c(0,1))+
+   geom_hline(yintercept=refmean, color="black",lwd=1)
+```
+
+
+
+### Pandemics
+
+```{r}
+#prepare data
+hc <- readRDS("data/hc_EUR_foreign_pandemic_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc<-hc[is.na(hc$when)==FALSE,]
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror"),]
+ hc$when<-cut(hc$when, breaks="quarter")
+ hc$country<-substr(hc$who,4,6)
+ 
+ 
+ dt<-hc[what!="_no_",list(news=sum(news)), list(country, where1, when)]
+ dt<-dcast(dt, formula = when+where1~country, fill=0)
+
+ dt<-dt[!(where1 %in% c("ESP","DEU","FRA","ITA","GBR")),]
+ # Compute correlation
+ res<-dt %>% group_by(when) %>%
+             summarize(DEU.FRA= cor(FRA, DEU),
+                       DEU.GBR = cor(DEU,GBR),
+                       DEU.ESP = cor(DEU,ESP),
+                      DEU.ITA = cor(DEU,ITA),
+                       ESP.FRA = cor(FRA,ESP),
+                        ESP.GBR = cor(ESP, GBR),
+                       ESP.ITA = cor(ESP,ITA),
+                        FRA.ITA = cor(FRA,ITA),
+                        FRA.GBR = cor(FRA,GBR),
+                       ITA.GBR = cor(ITA, GBR))
+ res$when<-as.Date(res$when)+45
+ 
+ 
+ library(tidyverse)
+ res<-pivot_longer(res,cols = 2:11)
+ refmean<-mean(res$value)
+ 
+ # diagram 
+ ggplot(res, aes(x=when, y=value, color = name))+
+   geom_line()+
+   geom_point(colour="black", size=1)+
+   scale_x_date(name = "Period of time (quarters)",breaks=as.Date(c("2014-01-01","2015-01-01","2016-01-01",
+                                  "2017-01-01","2018-01-01","2019-01-01","2020-01-01")),
+                minor_breaks = NULL)+
+     scale_y_continuous(name = "Pearson correlation of spatial distribution",breaks=c(0,0.2,0.4,0.6,0.8,1), limits = c(0,1))+
+   geom_hline(yintercept=refmean, color="black",lwd=1) 
+   
+```
