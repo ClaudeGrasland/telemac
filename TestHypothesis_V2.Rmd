@@ -561,8 +561,7 @@ hc<-hc[hc$when>as.Date("2013-06-30"),]
                                   "2017-01-01","2018-01-01","2019-01-01","2020-01-01")),
                 minor_breaks = NULL)+
      scale_y_continuous(name = "Pearson correlation of spatial distribution",breaks=c(0,0.2,0.4,0.6,0.8,1), limits = c(0,1))+
-   geom_hline(yintercept=refmean, color="black",lwd=1)+ 
-   geom_text(aes(label="Trump Wall", x=as.Date("2017-02-15"),y=1), colour="black")
+   geom_hline(yintercept=refmean, color="black",lwd=1)
 ```
 
 
