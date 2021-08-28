@@ -1,0 +1,333 @@
+---
+title: "MODELS USED IN FRONTIER'S PAPER (V2)"
+author: "Claude Grasland, Université de Paris"
+subtitle: Version 1.0 - August 2021
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, error = FALSE)
+library(data.table)
+library(dplyr)
+library(knitr)
+library(ggplot2)
+library(stargazer)
+#library(reldist)
+#library(quanteda)
+
+```
+
+
+## Model 5 : Time Synchronization
+
+
+
+
+### Borders
+
+```{r}
+# prepare data
+hc <- readRDS("data/hc_EUR_foreign_border_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc<-hc[is.na(hc$when)==FALSE,]
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror", "es_ESP_mundo", "en_GBR_guardi","en_GBR_dailyt"),]
+  hc$what[hc$what!="_no_"]<-"_yes_"
+ hc$when<-cut(hc$when, breaks = "month")
+ dt<-hc[,list(news=sum(news)), list(who,  when,what)]
+ dt<-dcast(dt, formula = who+when~what, fill=0)
+ names(dt)<-c("who","when","no","yes")
+ dt$tot<-dt$yes+dt$no
+dt$salience<-100*dt$yes/dt$tot
+dt$when<-as.Date(dt$when)
+dt<-dt[,c(1,2,6)]
+
+dt2<-dcast(dt,formula = when~who)
+mat<-as.matrix(dt2[,-1])
+row.names(mat)<-as.character(dt2$when)
+ 
+# Rolling function for correlation over 13 months
+
+library(TTR)
+rolling_year <-function(don,i,j){
+   cor<-runCor(don[,i],don[,j],13)
+   res<-data.frame(when=row.names(cor))
+   res$who1<-colnames(mat)[i]
+   res$who2<-colnames(mat)[j]
+   res$r=cor[,1]
+   x<-c(rep(NA,6),res$when[1:(length(res$when)-6)])
+   res$when<-x
+   row.names(res)<-NULL
+   res<-res[is.na(res$r)==F,]
+   return(res)
+}
+
+
+# Compute time correlation by couples of media
+
+listmedia <- names(table(hc$who))
+nbmedia<-length(listmedia)
+
+tabres<-rolling_year(mat,1,1)
+for (i in 1:nbmedia) {
+   for (j in i:nbmedia){
+      tabres2<-rolling_year(mat,i,j)
+      tabres<-rbind(tabres,tabres2)
+   }
+}
+tabres<-tabres[tabres$who1!=tabres$who2,]
+
+# Compute differences between media of same / different countries
+
+tabres$country<-as.factor(substr(tabres$who1,4,6)==substr(tabres$who2,4,6))
+levels(tabres$country)<-c("Different","Same")
+
+tabfin<-tabres %>% group_by(country,when) %>%
+                   summarize(cor=mean(r))
+tabfin$when<-as.Date(tabfin$when)
+
+
+
+# add salience 
+
+ dt<-hc[,list(news=sum(news)), list( when,what)]
+ dt<-dcast(dt, formula = when~what, fill=0)
+ dt<-as.data.frame(dt)
+ names(dt)<-c("when","no","yes")
+ dt$tot<-dt$yes+dt$no
+ dt$when<-as.Date(dt$when)
+dt$salience<-100*dt$yes/dt$tot
+dt<-dt[,c("when","salience")]
+dt$salience<-dt$salience/mean(dt$salience,na.rm=T)
+dt$salience<-cut(dt$salience,breaks=c(0,0.4,0.8,1.6,3.2,100))
+levels(dt$salience)<-c("Very Low (< 0.4)", "Low (0.4 to 0.8)","Medium (0.8 to 1.6)","High (1.6 to 3.2)","Very High (> 3.2)")
+dt$when<-as.Date(dt$when)
+tabfin<-tabfin[,1:3]
+#tabfin<-left_join(tabfin,dt)
+tabfin<-left_join(dt,tabfin)
+
+# Plot results and save data
+ggplot(tabfin) +
+     geom_tile(aes(x=when,y=0.5,fill=salience),height=1,alpha=0.1) + 
+     geom_line(aes(x=when,y=cor,color=country),na.rm = T) +
+     scale_fill_manual("Salience", values=c("blue","green","yellow","orange","red"))+
+   theme_light()
+tabbord<-tabfin
+
+
+```
+
+
+
+### Migrants & refugees
+
+```{r}
+# prepare data
+hc <- readRDS("data/hc_EUR_foreign_mobil_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc<-hc[is.na(hc$when)==FALSE,]
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror", "es_ESP_mundo", "en_GBR_guardi","en_GBR_dailyt"),]
+ hc$when<-cut(hc$when, breaks = "month")
+ hc$what[hc$what!="_no_"]<-"_yes_"
+ dt<-hc[,list(news=sum(news)), list(who,  when,what)]
+ dt<-dcast(dt, formula = who+when~what, fill=0)
+ names(dt)<-c("who","when","yes","no")
+ dt$tot<-dt$yes+dt$no
+dt$salience<-100*dt$yes/dt$tot
+dt$when<-as.Date(dt$when)
+dt<-dt[,c(1,2,6)]
+
+dt2<-dcast(dt,formula = when~who)
+mat<-as.matrix(dt2[,-1])
+row.names(mat)<-as.character(dt2$when)
+ 
+# Rolling function for correlation over 13 months
+
+library(TTR)
+rolling_year <-function(don,i,j){
+   cor<-runCor(don[,i],don[,j],13)
+   res<-data.frame(when=row.names(cor))
+   res$who1<-colnames(mat)[i]
+   res$who2<-colnames(mat)[j]
+   res$r=cor[,1]
+   x<-c(rep(NA,6),res$when[1:(length(res$when)-6)])
+   res$when<-x
+   row.names(res)<-NULL
+   res<-res[is.na(res$r)==F,]
+   return(res)
+}
+
+
+# Compute time correlation by couples of media
+
+listmedia <- names(table(hc$who))
+nbmedia<-length(listmedia)
+
+tabres<-rolling_year(mat,1,1)
+for (i in 1:nbmedia) {
+   for (j in i:nbmedia){
+      tabres2<-rolling_year(mat,i,j)
+      tabres<-rbind(tabres,tabres2)
+   }
+}
+tabres<-tabres[tabres$who1!=tabres$who2,]
+
+# Compute differences between media of same / different countries
+
+tabres$country<-as.factor(substr(tabres$who1,4,6)==substr(tabres$who2,4,6))
+levels(tabres$country)<-c("Different","Same")
+
+tabfin<-tabres %>% group_by(country,when) %>%
+                   summarize(cor=mean(r))
+tabfin$when<-as.Date(tabfin$when)
+
+# add salience 
+
+ dt<-hc[,list(news=sum(news)), list( when,what)]
+ dt<-dcast(dt, formula = when~what, fill=0)
+ dt<-as.data.frame(dt)
+ names(dt)<-c("when","no","yes")
+ dt$tot<-dt$yes+dt$no
+ dt$when<-as.Date(dt$when)
+dt$salience<-100*dt$yes/dt$tot
+
+
+dt<-dt[,c("when","salience")]
+dt$salience<-dt$salience/mean(dt$salience,na.rm=T)
+dt$salience<-cut(dt$salience,breaks=c(0,0.4,0.8,1.6,3.2,100))
+levels(dt$salience)<-c("Very Low (< 0.4)", "Low (0.4 to 0.8)","Medium (0.8 to 1.6)","High (1.6 to 3.2)","Very High (> 3.2)")
+dt$when<-as.Date(dt$when)
+tabfin<-tabfin[,1:3]
+#tabfin<-left_join(tabfin,dt)
+tabfin<-left_join(dt,tabfin)
+
+# Plot results and save data
+ggplot(tabfin) +
+     geom_tile(aes(x=when,y=0.5,fill=salience),height=1,alpha=0.1) + 
+     geom_line(aes(x=when,y=cor,color=country)) +
+     scale_fill_manual("Salience", values=c("blue","green","yellow","orange","red"))+
+   theme_light()
+tabmigr<-tabfin
+
+```
+
+
+### Pandemics
+
+```{r}
+# prepare data
+hc <- readRDS("data/hc_EUR_foreign_pandemic_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc<-hc[is.na(hc$when)==FALSE,]
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror", "es_ESP_mundo", "en_GBR_guardi","en_GBR_dailyt"),]
+ hc$when<-cut(hc$when, breaks = "month")
+ hc$what[hc$what!="_no_"]<-"yes"
+ dt<-hc[,list(news=sum(news)), list(who,  when,what)]
+ dt<-dcast(dt, formula = who+when~what, fill=0)
+ names(dt)<-c("who","when","yes","no")
+ dt$tot<-dt$yes+dt$no
+dt$salience<-100*dt$yes/dt$tot
+dt$when<-as.Date(dt$when)
+dt<-dt[,c(1,2,6)]
+
+dt2<-dcast(dt,formula = when~who)
+mat<-as.matrix(dt2[,-1])
+row.names(mat)<-as.character(dt2$when)
+ 
+# Rolling function for correlation over 13 months
+
+library(TTR)
+rolling_year <-function(don,i,j){
+   cor<-runCor(don[,i],don[,j],13)
+   res<-data.frame(when=row.names(cor))
+   res$who1<-colnames(mat)[i]
+   res$who2<-colnames(mat)[j]
+   res$r=cor[,1]
+   x<-c(rep(NA,6),res$when[1:(length(res$when)-6)])
+   res$when<-x
+   row.names(res)<-NULL
+   res<-res[is.na(res$r)==F,]
+   return(res)
+}
+
+
+# Compute time correlation by couples of media
+
+listmedia <- names(table(hc$who))
+nbmedia<-length(listmedia)
+
+tabres<-rolling_year(mat,1,1)
+for (i in 1:nbmedia) {
+   for (j in i:nbmedia){
+      tabres2<-rolling_year(mat,i,j)
+      tabres<-rbind(tabres,tabres2)
+   }
+}
+tabres<-tabres[tabres$who1!=tabres$who2,]
+
+# Compute differences between media of same / different countries
+
+tabres$country<-as.factor(substr(tabres$who1,4,6)==substr(tabres$who2,4,6))
+levels(tabres$country)<-c("Different","Same")
+
+tabfin<-tabres %>% group_by(country,when) %>%
+                   summarize(cor=mean(r))
+tabfin$when<-as.Date(tabfin$when)
+# add salience 
+
+ dt<-hc[,list(news=sum(news)), list( when,what)]
+ dt<-dcast(dt, formula = when~what, fill=0)
+ dt<-as.data.frame(dt)
+ names(dt)<-c("when","no","yes")
+ dt$tot<-dt$yes+dt$no
+ dt$when<-as.Date(dt$when)
+dt$salience<-100*dt$yes/dt$tot
+
+dt<-dt[,c("when","salience")]
+dt$salience<-dt$salience/mean(dt$salience,na.rm=T)
+dt$salience<-cut(dt$salience,breaks=c(0,0.4,0.8,1.6,3.2,100))
+levels(dt$salience)<-c("Very Low (< 0.4)", "Low (0.4 to 0.8)","Medium (0.8 to 1.6)","High (1.6 to 3.2)","Very High (> 3.2)")
+dt$when<-as.Date(dt$when)
+tabfin<-tabfin[,1:3]
+#tabfin<-left_join(tabfin,dt)
+tabfin<-left_join(dt,tabfin)
+# Plot results and save data
+ggplot(tabfin) +
+     geom_tile(aes(x=when,y=0.5,fill=salience),height=1,alpha=0.1) + 
+     geom_line(aes(x=when,y=cor,color=country)) +
+     scale_fill_manual("Salience", values=c("blue","green","yellow","orange","red")) + theme_light()
+tabpand<-tabfin
+
+```
+
+
+
+### Synthetic figure
+
+
+```{r}
+tabbord$topic <- "Borders"
+tabmigr$topic <- "Migrant & Refugees"
+tabpand$topic <- "Pandemics"
+tabtopics<-rbind(tabbord,tabmigr,tabpand)
+tabtopics$country[is.na(tabtopics$country)]<-"Same"
+ # diagram 
+ p<-ggplot(tabtopics) +
+     geom_tile(aes(x=when,y=0.5,fill=salience),height=1,alpha=0.1) + 
+     geom_line(aes(x=when,y=cor,color=country)) +
+      scale_x_date(name = "Correlation bewteen media agenda by rolling periods of 13 months")+
+     scale_y_continuous(name = "Temporal synchronization",breaks=c(0,0.2,0.4,0.6,0.8,1), limits = c(0,1))+
+         scale_fill_manual("Salience", values=c("blue","green","yellow","orange","red")) +
+    facet_wrap(~topic)+theme_light()
+p
+ggsave(filename = "Modele5.pdf",plot = p,width=8, height = 4)
+
+
+```
+
