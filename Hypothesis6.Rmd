@@ -1,0 +1,340 @@
+---
+title: "MODELS USED IN FRONTIER'S PAPER (V2)"
+author: "Claude Grasland, Université de Paris"
+subtitle: Version 1.0 - August 2021
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE, error = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, error = FALSE)
+library(data.table)
+library(dplyr)
+library(knitr)
+library(ggplot2)
+#library(stargazer)
+library(lubridate)
+#library(TTR)
+#library(reldist)
+#library(quanteda)
+
+```
+
+
+## Model 4 : Spatial Synchronization
+
+
+
+
+### Borders
+
+```{r}
+# (1) select data
+hc <- readRDS("data/hc_EUR_foreign_border_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc$what[hc$what!="_no_"]<-"yes"
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror", "es_ESP_mundo", "en_GBR_guardi","en_GBR_dailyt"),]
+  hc$where<-hc$where1
+  
+ ### -- (2) Function computing yearly correlation by moving month
+
+ corr_spatial<-function(hyp = hyp, mois = 0)
+ { 
+ # (2.0) Choose month
+ hyp$when<- hyp$when %m+% months(mois+6)
+
+ 
+ # (2.1) Aggregate spatial distribution by year
+ dt<-hyp[hyp$what!="_no_",]
+ dt$when<-cut(dt$when, breaks = "year")
+ dt<-dt[,list(news=sum(news)),list(who,where,when)]
+ 
+  # (2.2) fill empty couples of who x when by 0
+ dt<-dcast(dt,formula = who~when+where,value.var = "news",fill = 0)
+ dt<-melt(dt) 
+ dt$when<-substr(as.character(dt$variable),1,10)
+ dt$where<-substr(as.character(dt$variable),12,14)
+ dt<-dt[,c("who","when","where","value")]
+
+ # (2.3) Put media by couples 
+ dt1<-dt %>% rename(who1=who, news1=value)
+ dt2<-dt %>% rename(who2=who, news2=value)
+ dt3<-full_join(dt1,dt2)
+ 
+ # (2.4) Compute correlation by media and year
+ cor<-dt3 %>% group_by(who1,who2,when) %>%
+              summarize(r = cor(news1,news2) ,
+                        n = n(),
+                        p = cor.test(news1,news2)$p.value)
+ 
+ # (2.5) Return result
+ cor$when<-  as.Date(cor$when) %m-% months(mois)
+ return(cor)
+ }
+  
+### ------
+ 
+# (3) Compute for all months & years
+tabres<-corr_spatial(hc,0)
+ for (i in 1:12) {
+    tabres2<-corr_spatial(hc,i)
+    tabres<-rbind(tabres,tabres2)
+ }
+ 
+tabres<-tabres %>% filter(when > as.Date("2013-12-31")) %>%
+                   filter(when < as.Date("2020-01-01"))
+# (4) Compute differences between media of same / different countries
+
+tabres$country<-as.factor(substr(tabres$who1,4,6)==substr(tabres$who2,4,6))
+levels(tabres$country)<-c("Different","Same")
+
+tabfin<-tabres %>% group_by(country,when) %>%
+                   summarize(cor=mean(r))
+tabfin$when<-as.Date(tabfin$when)
+ 
+# (5) add salience by month
+ dt<-hc
+ dt$when <-cut(dt$when, breaks = "month")
+ dt<-dt[,list(news=sum(news)), list( when,what)]
+ dt<-dcast(dt, formula = when~what, fill=0)
+ dt<-as.data.frame(dt)
+ names(dt)<-c("when","no","yes")
+ dt$tot<-dt$yes+dt$no
+ dt$when<-as.Date(dt$when)
+dt$salience<-100*dt$yes/dt$tot
+dt<-dt[,c("when","salience")]
+dt$salience<-dt$salience/mean(dt$salience,na.rm=T)
+dt$salience<-cut(dt$salience,breaks=c(0,0.4,0.8,1.6,3.2,100))
+levels(dt$salience)<-c("Very Low (< 0.4)", "Low (0.4 to 0.8)","Medium (0.8 to 1.6)","High (1.6 to 3.2)","Very High (> 3.2)")
+dt$when<-as.Date(dt$when)
+tabfin<-tabfin[,1:3]
+#tabfin<-left_join(tabfin,dt)
+tabfin<-left_join(dt,tabfin)
+  
+  
+# Plot results and save data
+ggplot(tabfin) +
+     geom_tile(aes(x=when,y=0.5,fill=salience),height=1,alpha=0.1) + 
+     geom_line(aes(x=when,y=cor,color=country),na.rm = T) +
+     scale_fill_manual("Salience", values=c("blue","green","yellow","orange","red"))+
+   theme_light()
+tabbord<-tabfin
+
+
+```
+
+
+
+### Migrants & refugees
+
+```{r}
+# prepare data
+hc <- readRDS("data/hc_EUR_foreign_mobil_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc<-hc[is.na(hc$when)==FALSE,]
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror", "es_ESP_mundo", "en_GBR_guardi","en_GBR_dailyt"),]
+ hc$when<-cut(hc$when, breaks = "month")
+ hc$what[hc$what!="_no_"]<-"_yes_"
+ dt<-hc[,list(news=sum(news)), list(who,  when,what)]
+ dt<-dcast(dt, formula = who+when~what, fill=0)
+ names(dt)<-c("who","when","yes","no")
+ dt$tot<-dt$yes+dt$no
+dt$salience<-100*dt$yes/dt$tot
+dt$when<-as.Date(dt$when)
+dt<-dt[,c(1,2,6)]
+
+dt2<-dcast(dt,formula = when~who)
+mat<-as.matrix(dt2[,-1])
+row.names(mat)<-as.character(dt2$when)
+ 
+# Rolling function for correlation over 13 months
+
+library(TTR)
+
+rolling_year <-function(don,i,j){
+   cor<-runCor(don[,i],don[,j],13)
+   res<-data.frame(when=row.names(cor))
+   res$who1<-colnames(mat)[i]
+   res$who2<-colnames(mat)[j]
+   res$r=cor[,1]
+   x<-c(rep(NA,6),res$when[1:(length(res$when)-6)])
+   res$when<-x
+   row.names(res)<-NULL
+   res<-res[is.na(res$r)==F,]
+   return(res)
+}
+
+
+# Compute time correlation by couples of media
+
+listmedia <- names(table(hc$who))
+nbmedia<-length(listmedia)
+
+tabres<-rolling_year(mat,1,1)
+for (i in 1:nbmedia) {
+   for (j in i:nbmedia){
+      tabres2<-rolling_year(mat,i,j)
+      tabres<-rbind(tabres,tabres2)
+   }
+}
+tabres<-tabres[tabres$who1!=tabres$who2,]
+
+# Compute differences between media of same / different countries
+
+tabres$country<-as.factor(substr(tabres$who1,4,6)==substr(tabres$who2,4,6))
+levels(tabres$country)<-c("Different","Same")
+
+tabfin<-tabres %>% group_by(country,when) %>%
+                   summarize(cor=mean(r))
+tabfin$when<-as.Date(tabfin$when)
+
+# add salience 
+
+ dt<-hc[,list(news=sum(news)), list( when,what)]
+ dt<-dcast(dt, formula = when~what, fill=0)
+ dt<-as.data.frame(dt)
+ names(dt)<-c("when","no","yes")
+ dt$tot<-dt$yes+dt$no
+ dt$when<-as.Date(dt$when)
+dt$salience<-100*dt$yes/dt$tot
+
+
+dt<-dt[,c("when","salience")]
+dt$salience<-dt$salience/mean(dt$salience,na.rm=T)
+dt$salience<-cut(dt$salience,breaks=c(0,0.4,0.8,1.6,3.2,100))
+levels(dt$salience)<-c("Very Low (< 0.4)", "Low (0.4 to 0.8)","Medium (0.8 to 1.6)","High (1.6 to 3.2)","Very High (> 3.2)")
+dt$when<-as.Date(dt$when)
+tabfin<-tabfin[,1:3]
+#tabfin<-left_join(tabfin,dt)
+tabfin<-left_join(dt,tabfin)
+
+# Plot results and save data
+ggplot(tabfin) +
+     geom_tile(aes(x=when,y=0.5,fill=salience),height=1,alpha=0.1) + 
+     geom_line(aes(x=when,y=cor,color=country)) +
+     scale_fill_manual("Salience", values=c("blue","green","yellow","orange","red"))+
+   theme_light()
+tabmigr<-tabfin
+
+```
+
+
+### Pandemics
+
+```{r}
+# prepare data
+hc <- readRDS("data/hc_EUR_foreign_pandemic_week.Rdata")
+hc<-hc[hc$when>as.Date("2013-06-30"),]
+ hc<-hc[hc$when<as.Date("2020-07-01"),]
+ hc<-hc[is.na(hc$when)==FALSE,]
+ hc<-hc[!hc$who %in% c("es_ESP_vangua","en_GBR_mirror", "es_ESP_mundo", "en_GBR_guardi","en_GBR_dailyt"),]
+ hc$when<-cut(hc$when, breaks = "month")
+ hc$what[hc$what!="_no_"]<-"yes"
+ dt<-hc[,list(news=sum(news)), list(who,  when,what)]
+ dt<-dcast(dt, formula = who+when~what, fill=0)
+ names(dt)<-c("who","when","yes","no")
+ dt$tot<-dt$yes+dt$no
+dt$salience<-100*dt$yes/dt$tot
+dt$when<-as.Date(dt$when)
+dt<-dt[,c(1,2,6)]
+
+dt2<-dcast(dt,formula = when~who)
+mat<-as.matrix(dt2[,-1])
+row.names(mat)<-as.character(dt2$when)
+ 
+# Rolling function for correlation over 13 months
+
+library(TTR)
+rolling_year <-function(don,i,j){
+   cor<-runCor(don[,i],don[,j],13)
+   res<-data.frame(when=row.names(cor))
+   res$who1<-colnames(mat)[i]
+   res$who2<-colnames(mat)[j]
+   res$r=cor[,1]
+   x<-c(rep(NA,6),res$when[1:(length(res$when)-6)])
+   res$when<-x
+   row.names(res)<-NULL
+   res<-res[is.na(res$r)==F,]
+   return(res)
+}
+
+
+# Compute time correlation by couples of media
+
+listmedia <- names(table(hc$who))
+nbmedia<-length(listmedia)
+
+tabres<-rolling_year(mat,1,1)
+for (i in 1:nbmedia) {
+   for (j in i:nbmedia){
+      tabres2<-rolling_year(mat,i,j)
+      tabres<-rbind(tabres,tabres2)
+   }
+}
+tabres<-tabres[tabres$who1!=tabres$who2,]
+
+# Compute differences between media of same / different countries
+
+tabres$country<-as.factor(substr(tabres$who1,4,6)==substr(tabres$who2,4,6))
+levels(tabres$country)<-c("Different","Same")
+
+tabfin<-tabres %>% group_by(country,when) %>%
+                   summarize(cor=mean(r))
+tabfin$when<-as.Date(tabfin$when)
+# add salience 
+
+ dt<-hc[,list(news=sum(news)), list( when,what)]
+ dt<-dcast(dt, formula = when~what, fill=0)
+ dt<-as.data.frame(dt)
+ names(dt)<-c("when","no","yes")
+ dt$tot<-dt$yes+dt$no
+ dt$when<-as.Date(dt$when)
+dt$salience<-100*dt$yes/dt$tot
+
+dt<-dt[,c("when","salience")]
+dt$salience<-dt$salience/mean(dt$salience,na.rm=T)
+dt$salience<-cut(dt$salience,breaks=c(0,0.4,0.8,1.6,3.2,100))
+levels(dt$salience)<-c("Very Low (< 0.4)", "Low (0.4 to 0.8)","Medium (0.8 to 1.6)","High (1.6 to 3.2)","Very High (> 3.2)")
+dt$when<-as.Date(dt$when)
+tabfin<-tabfin[,1:3]
+#tabfin<-left_join(tabfin,dt)
+tabfin<-left_join(dt,tabfin)
+# Plot results and save data
+ggplot(tabfin) +
+     geom_tile(aes(x=when,y=0.5,fill=salience),height=1,alpha=0.1) + 
+     geom_line(aes(x=when,y=cor,color=country)) +
+     scale_fill_manual("Salience", values=c("blue","green","yellow","orange","red")) + theme_light()
+tabpand<-tabfin
+
+```
+
+
+
+### Synthetic figure
+
+
+```{r}
+tabbord$topic <- "Borders"
+tabmigr$topic <- "Migrant & Refugees"
+tabpand$topic <- "Pandemics"
+tabtopics<-rbind(tabbord,tabmigr,tabpand)
+tabtopics$country[is.na(tabtopics$country)]<-"Same"
+ # diagram 
+ p<-ggplot(tabtopics) +
+     geom_tile(aes(x=when,y=0.5,fill=salience),height=1,alpha=0.1) + 
+     geom_line(aes(x=when,y=cor,color=country)) +
+      scale_x_date(name = "Correlation bewteen media agenda by rolling periods of 13 months")+
+     scale_y_continuous(name = "Temporal synchronization",breaks=c(0,0.2,0.4,0.6,0.8,1), limits = c(0,1))+
+         scale_fill_manual("Salience", values=c("blue","green","yellow","orange","red")) +
+    facet_wrap(~topic)+theme_light()+theme(legend.position = "bottom",legend.direction ="vertical")
+p
+ggsave(filename = "Modele5.pdf",plot = p,width=8, height = 5)
+
+
+```
+
