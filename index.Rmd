@@ -16,9 +16,11 @@ library(DT)
 library(dplyr)
 library(cartography)
 library(knitr)
-library(tidygraph)
-library(ggraph)
+#library(tidygraph)
+#library(ggraph)
 library(ggplot2)
+library(visNetwork, quietly = T)
+library(igraph)
 #library(reldist)
 #library(quanteda)
 
@@ -96,6 +98,7 @@ tabfin <- addmargins(mat)
 
 kable(tabfin,caption = "Textual units by media and order in news" )
 ```
+
 ## Distribution of news by country and by week
 
 For the full period of observation, the total number of textual units published weekly in each country of the sample is between 500 and 2000.
@@ -1026,11 +1029,11 @@ res_when_where_what$plotly %>% layout(autosize = F, width = 800, height = 500)
 
 ### Function
 
-```{r where.where.what function, echo=TRUE}
+```{r where.where.what.v2 function, echo=TRUE}
 
-#### ---------------- where.where.what ----------------
+#### ---------------- where.where.what.v2 ----------------
 #' @title  visualize variation of the topic by co-location 
-#' @name where.where.what
+#' @name where.where.what.v2
 #' @description create a table of variation of the topic by co-location
 #' @param hc an hypercube prepared as data.table
 #' @param test : visualize test (TRUE) or salience (FALSE)
@@ -1041,104 +1044,131 @@ res_when_where_what$plotly %>% layout(autosize = F, width = 800, height = 500)
 #' @param title Title of the graphic
 
 
-where.where.what <- function (hc = hypercube,
-                           test=FALSE,
-                           minsamp = 20,
-                           mintest = 5,
-                           minedge = 2,
-                           minnode = 10,
-                           title = "What, Where and Where ?")
+where.where.what.v2 <- function (hc = hypercube,
+                                 test=FALSE,
+                                 minsamp = 20,
+                                 mintest = 5,
+                                 minedge = 2,
+                                 minnode = 10,
+                                 title = "What, Where and Where ?")
 {
+  
 
-  #test...
-
+  tab<-hc
+  tab$what <-tab$what !="_no_"
+  
+  # Palette
+  
+  # Create nodes
+  nodes<-tab[where1 !=where2,list(trial = sum(news),success=round(sum(news*what),0)),by = list(where1)]
+  nodes$null.value<-sum(nodes$success)/sum(nodes$trial)
+  nodes <-nodes %>% filter(success > minnode, trial > minsamp)
+  nodes<-testchi2(tabtest=nodes,
+                  minsamp = minsamp,
+                  mintest = mintest)
+  
+  if (test==FALSE) {nodes$index =nodes$salience
+  nodes<-nodes[nodes$trial > minsamp,]
+  mycol<-brewer.pal(7,"YlOrRd") }  else
+  {nodes$index=nodes$p.value
+  nodes<-nodes[nodes$trial*nodes$null.value>mintest,]
+  mycol<-rev(brewer.pal(7,"RdYlBu"))
+  mycol[4]<-"lightyellow"
+  }
+  
+  #tab2<-tab2[order(success),]%>% filter(tab2$success>minnode)
   
   
   
-tab<-hc
-tab$what <-tab$what !="_no_"
-
-# Palette
-
-
-# Create edges
-tab1<-tab[where1 !=where2,list(trial = sum(news),success=round(sum(news*what),0)),by = list(where1,where2)]
-tab1$null.value<-sum(tab1$success)/sum(tab1$trial)
-
-tab1<-testchi2(tabtest=tab1,
-              minsamp = minsamp,
-              mintest = mintest)
-
-    if (test==FALSE) {tab1$index =tab1$salience
-                     tab1<-tab1[tab1$trial > minsamp,]
-                     mycol<-brewer.pal(7,"YlOrRd") }  else
-                       {tab1$index=tab1$p.value
-                     tab1<-tab1[tab1$trial*tab1$null.value>mintest,]
-                      mycol<-rev(brewer.pal(7,"RdYlBu"))
-                      mycol[4]<-"lightyellow"
-                     }
-
-
-
-
-tab1<-tab1[order(success),]
-
-# Create nodes
-tab2<-tab[where1 !=where2,list(trial = sum(news),success=round(sum(news*what),0)),by = list(where1)]
-tab2$null.value<-sum(tab2$success)/sum(tab2$trial)
-tab2<-testchi2(tabtest=tab2,
-                minsamp = minsamp,
-                mintest = mintest)
-
-    if (test==FALSE) {tab2$index =tab2$salience
-                     tab2<-tab2[tab2$trial > minsamp,]
-                     mycol<-brewer.pal(7,"YlOrRd") }  else
-                       {tab2$index=tab2$p.value
-                     tab2<-tab2[tab2$trial*tab2$null.value>mintest,]
-                      mycol<-rev(brewer.pal(7,"RdYlBu"))
-                      mycol[4]<-"lightyellow"
-                     }
-
-tab2<-tab2[order(success),]
-
-
-
-
-# Build tibble graph object
-tib_g=tidygraph::tbl_graph(nodes=tab2,edges=tab1) 
-
-# filter
-sel_tib_g <-tib_g %>% activate(edges) %>%
-                      filter(success > minedge) %>%
-                      activate(nodes) %>%
-                      filter(success > minnode) %>%
-                      mutate(isol = node_is_isolated()) %>%
-                      filter(isol == FALSE)
-
-## Create a ggraph layout
-g=sel_tib_g %>% 
-   ggraph(layout="stress")
-
-# visualize
-gg<-g + geom_edge_link(aes(edge_width=success, edge_colour = index),
-                   alpha = 0.3 , show.legend=c(TRUE,FALSE,FALSE, FALSE,FALSE)) +
-        scale_edge_colour_gradientn(colors = mycol)+
-   geom_node_point(aes(colour = index, size=success), 
-                  alpha=0.6) +
-        scale_color_gradientn(colors =mycol)+
-  geom_node_label(aes(label = where1, size = 16*sqrt(success)),alpha =1,label.size=0.4,show.legend = FALSE)
-
-
-output<-list("table" = tab1, "plot" =gg)
-
-return(output)
+  # Create edges
+  edges<-tab[where1 !=where2,list(trial = sum(news),success=round(sum(news*what),0)),by = list(where1,where2)]
+  edges$null.value<-sum(edges$success)/sum(edges$trial)
+  edges <-edges %>% filter(success > minedge, trial > minsamp)
+  
+  edges<-testchi2(tabtest=edges,
+                  minsamp = minsamp,
+                  mintest = mintest)
+  
+  if (test==FALSE) {edges$index =edges$salience
+  edges<-edges[edges$trial > minsamp,]
+  mycol<-brewer.pal(7,"YlOrRd") }  else
+  {edges$index=edges$p.value
+  edges<-edges[edges$trial*edges$null.value>mintest,]
+  mycol<-rev(brewer.pal(7,"RdYlBu"))
+  mycol[4]<-"lightyellow"
+  }
+  
+  
+  
+  # adjust list of edges to list of nodes and vice versa
+  edges <- edges %>% filter(where1 %in% nodes$where1, where2 %in% nodes$where1)
+  nodes <- nodes %>% filter(where1 %in% unique(c(edges$where1,edges$where2)))
+  
+  
+  # add numeric code to nodes 
+  nodes$label<-as.character(nodes$where1)
+  nodes$id<-1:length(nodes$label)
+  
+  # add numeric code to edges
+  iden<-nodes %>% select(from=id, where1=label)
+  edges <- merge(edges,iden, by="where1",all.x=T,all.y=F)
+  iden<-nodes %>% select(to=id, where2=label)
+  edges <- merge(edges,iden, by="where2",all.x=T,all.y=F)
+  
+  # add size to nodes
+  nodes$value  = sqrt(10 *nodes$success/max(nodes$success))
+  
+  # add size to edges
+  edges$value  = sqrt(10 *edges$success/max(edges$success))
+  
+  # add color to nodes and edges
+  n_cols <- 101
+  pal <- colorRampPalette(mycol)(n_cols)
+  p<-nodes$index/max(nodes$index)
+  c_ref = findInterval(p, seq(from = 0, to = 1, length.out = n_cols))
+  nodes$color<-pal[c_ref]
+  p<-edges$index/max(nodes$index)
+  c_ref = findInterval(p, seq(from = 0, to = 1, length.out = n_cols))
+  edges$color<-pal[c_ref]
+  
+  
+  # eliminate loops
+  edges <- edges[edges$from < edges$to,]
+  
+  
+  net<- visNetwork(nodes, 
+                   edges, 
+                   main = title,
+                   height = "700px", 
+                   width = "100%") %>%
+    visNodes(scaling =list(min =5, max=30, 
+                           label=list(min=5,max=30, 
+                                      maxVisible = 5)))%>%
+    visEdges(scaling =list(min =5, max=30)) %>%
+    visOptions(highlightNearest = TRUE,
+               #               selectedBy = "group", 
+               #               manipulation = TRUE,
+               nodesIdSelection = TRUE) %>%
+    visInteraction(navigationButtons = TRUE) %>%
+    visLegend() %>%
+    visIgraphLayout(layout ="layout.fruchterman.reingold",smooth = TRUE)
+  
+  net
+  
+  
+  
+  
+  
+  output<-list("edges" = edges, "nodes" = nodes, "plot" = net)
+  
+  return(output)
 }
 ```
 
 ### Example
 ```{r where.where.what example}
 
-res_where_where_what<- where.where.what(hc=hyper$year,
+res_where_where_what<- where.where.what.v2(hc=hyper$year,
                                         test=FALSE,
                                          mintest = 5,
                                          minsamp = 10,
@@ -1147,7 +1177,7 @@ res_where_where_what<- where.where.what(hc=hyper$year,
                                          title = "Network of news about topic - Salience")
 res_where_where_what$plot 
 
-res_where_where_what<- where.where.what(hc=hyper$year,
+res_where_where_what<- where.where.what.v2(hc=hyper$year,
                                         test=TRUE,
                                          mintest = 5,
                                          minsamp = 10,
@@ -1158,3 +1188,7 @@ res_where_where_what$plot
 
 
 ```
+
+
+
+
